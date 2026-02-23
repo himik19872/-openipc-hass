@@ -69,4 +69,27 @@
 ```yaml
 openipc:
   telegram_bot_token: "YOUR_BOT_TOKEN"
-  telegram_chat_id: "YOUR_CHAT_ID"
+  telegram_chat_id: "YOUR_CHAT_ID
+
+
+
+обновление 23.02.2006
+добавлена подержка камер beward и vivotek
+✅ Что работает:
+Beward DS07P-LP (192.168.1.10):
+✅ Открытие двери - успешно (relay 0)
+
+✅ Снимки - работают через /cgi-bin/jpg/image.cgi
+
+✅ RTSP поток - работает через /av0_0
+
+✅ Сенсоры - обновляются корректно
+
+Vivotek SD9364-EHL (192.168.1.8):
+✅ RTSP поток - работает через /live.sdp
+
+✅ Снимки - работают через RTSP
+
+✅ Данные - обновляются корректно
+
+⚠️ Ночной режим - возвращает 404 (не поддерживается)
