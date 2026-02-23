@@ -16,6 +16,7 @@ from homeassistant.const import (
     CONF_USERNAME, 
     CONF_PASSWORD,
     CONF_ENTITY_ID,
+    CONF_NAME,
 )
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
@@ -41,9 +42,32 @@ from .const import (
     DEFAULT_OSD_COLOR,
     OSD_POSITIONS,
     OSD_COLORS,
+    # Device types
+    CONF_DEVICE_TYPE,
+    DEVICE_TYPE_OPENIPC,
+    DEVICE_TYPE_BEWARD,
+    DEVICE_TYPE_VIVOTEK,
 )
 
 from .recorder import OpenIPCRecorder
+
+# Попытка импортировать Beward клиент (опционально)
+try:
+    from .beward_device import OpenIPCBewardDevice
+    BEWARD_AVAILABLE = True
+except ImportError:
+    BEWARD_AVAILABLE = False
+    OpenIPCBewardDevice = None
+    _LOGGER = logging.getLogger(__name__)
+    _LOGGER.warning("Beward client not available. Install: pip install beward==1.1.4")
+
+# Попытка импортировать Vivotek клиент (опционально)
+try:
+    from .vivotek_device import OpenIPCVivotekDevice
+    VIVOTEK_AVAILABLE = True
+except ImportError:
+    VIVOTEK_AVAILABLE = False
+    OpenIPCVivotekDevice = None
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -159,6 +183,12 @@ RECORD_WITH_OSD_SCHEMA = vol.Schema({
     vol.Optional("send_telegram", default=False): cv.boolean,
 })
 
+# Beward specific service schemas
+BEWARD_OPEN_DOOR_SCHEMA = vol.Schema({
+    vol.Required(CONF_ENTITY_ID): cv.entity_id,
+    vol.Optional("main", default=True): cv.boolean,
+})
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the OpenIPC component."""
     hass.data.setdefault(DOMAIN, {})
@@ -180,6 +210,47 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh()
     
     hass.data[DOMAIN][entry.entry_id] = coordinator
+    
+    # Определяем тип устройства
+    device_type = entry.data.get(CONF_DEVICE_TYPE, DEVICE_TYPE_OPENIPC)
+    
+    # Устанавливаем флаги для recorder
+    coordinator.is_beward = (device_type == DEVICE_TYPE_BEWARD)
+    coordinator.is_vivotek = (device_type == DEVICE_TYPE_VIVOTEK)
+    
+    # Инициализируем специфичные для бренда клиенты
+    coordinator.beward = None
+    coordinator.vivotek = None
+    
+    if device_type == DEVICE_TYPE_BEWARD and OpenIPCBewardDevice:
+        try:
+            coordinator.beward = OpenIPCBewardDevice(
+                hass,
+                host=entry.data[CONF_HOST],
+                username=entry.data[CONF_USERNAME],
+                password=entry.data[CONF_PASSWORD],
+                camera_name=entry.data.get(CONF_NAME, "Beward")
+            )
+            hass.async_create_task(coordinator.beward.async_connect())
+            _LOGGER.info(f"✅ Beward device initialized for {entry.data.get(CONF_NAME)} (DS07P-LP)")
+        except Exception as err:
+            _LOGGER.error(f"❌ Beward init failed: {err}")
+            coordinator.beward = None
+            
+    elif device_type == DEVICE_TYPE_VIVOTEK and OpenIPCVivotekDevice:
+        try:
+            coordinator.vivotek = OpenIPCVivotekDevice(
+                hass,
+                host=entry.data[CONF_HOST],
+                username=entry.data[CONF_USERNAME],
+                password=entry.data[CONF_PASSWORD],
+                camera_name=entry.data.get(CONF_NAME, "Vivotek")
+            )
+            hass.async_create_task(coordinator.vivotek.async_test_connection())
+            _LOGGER.info(f"✅ Vivotek device initialized for {entry.data.get(CONF_NAME)} (SD9364-EHL)")
+        except Exception as err:
+            _LOGGER.error(f"❌ Vivotek init failed: {err}")
+            coordinator.vivotek = None
     
     # Register services
     await async_register_services(hass)
@@ -224,7 +295,6 @@ async def async_register_services(hass: HomeAssistant) -> None:
     async def async_find_coordinator_by_entity_id(entity_id):
         """Find coordinator by entity_id - использует ТОЛЬКО точное совпадение."""
         if not entity_id:
-            _LOGGER.error("async_find_coordinator_by_entity_id called with empty entity_id")
             return None
             
         _LOGGER.debug("🔍 Looking for coordinator with entity_id: %s", entity_id)
@@ -233,14 +303,11 @@ async def async_register_services(hass: HomeAssistant) -> None:
         if isinstance(entity_id, list):
             if entity_id:
                 entity_id = entity_id[0]
-                _LOGGER.debug("Entity_id was list, using first element: %s", entity_id)
             else:
-                _LOGGER.error("Entity_id is empty list")
                 return None
         
         # Убеждаемся, что entity_id - строка
         if not isinstance(entity_id, str):
-            _LOGGER.error("Entity_id is not a string: %s", type(entity_id))
             return None
         
         # Проходим по всем координаторам и ищем ТОЧНОЕ совпадение
@@ -257,25 +324,15 @@ async def async_register_services(hass: HomeAssistant) -> None:
             
             # Возможные точные варианты для этой камеры
             exact_ids = [
-                f"camera.{camera_name}",                          # camera.openipc_camera
-                f"camera.{camera_host.replace('.', '_')}",       # camera.192_168_1_106
-                f"camera.{camera_host}",                          # camera.192.168.1.106
+                f"camera.{camera_name}",
+                f"camera.{camera_host.replace('.', '_')}",
+                f"camera.{camera_host}",
             ]
-            
-            _LOGGER.debug("Checking %s against exact IDs: %s", entity_id, exact_ids)
             
             # Только точное совпадение!
             if entity_id in exact_ids:
-                _LOGGER.info("✅ Found exact match for %s (camera: %s, host: %s)", 
-                            entity_id, camera_name, camera_host)
                 return coordinator
         
-        # Если точного совпадения нет - возвращаем None, а не первую камеру!
-        _LOGGER.error("❌ No exact match found for entity_id: %s", entity_id)
-        _LOGGER.error("   Please use one of these formats:")
-        _LOGGER.error("   - camera.openipc_camera")
-        _LOGGER.error("   - camera.%s (with underscores)", coordinator.host.replace('.', '_') if 'coordinator' in locals() else "192_168_1_xxx")
-        _LOGGER.error("   - camera.%s (with dots)", coordinator.host if 'coordinator' in locals() else "192.168.1.xxx")
         return None
     
     async def async_find_media_player(entity_id: str):
@@ -680,6 +737,24 @@ async def async_register_services(hass: HomeAssistant) -> None:
         else:
             _LOGGER.error("Coordinator not found for entity %s", entity_id)
 
+    # Beward specific services
+    async def async_beward_open_door(call: ServiceCall) -> None:
+        """Handle Beward open door service."""
+        entity_id = None
+        if hasattr(call, 'target') and call.target:
+            entity_id = call.target.get("entity_id")
+        if not entity_id:
+            entity_id = call.data.get(CONF_ENTITY_ID)
+        
+        main = call.data.get("main", True)
+        
+        coordinator = await async_find_coordinator_by_entity_id(entity_id)
+        if coordinator and hasattr(coordinator, 'beward') and coordinator.beward:
+            await coordinator.beward.async_open_door(main)
+            _LOGGER.debug("Beward open door on %s", entity_id)
+        else:
+            _LOGGER.error("Beward device not available for entity %s", entity_id)
+
     # Сервис для записи с OSD
     async def async_record_with_osd(call: ServiceCall) -> None:
         """Handle record with OSD service."""
@@ -742,7 +817,6 @@ async def async_register_services(hass: HomeAssistant) -> None:
         
         if not coordinator:
             _LOGGER.error("❌ No camera found with entity_id: %s", entity_id)
-            _LOGGER.error("   Please check that you're using the correct entity_id")
             return
             
         if not hasattr(coordinator, 'recorder'):
@@ -858,6 +932,15 @@ async def async_register_services(hass: HomeAssistant) -> None:
             schema=RECORD_WITH_OSD_SCHEMA
         )
 
+    # Register Beward services
+    if not hass.services.has_service(DOMAIN, "beward_open_door"):
+        hass.services.async_register(
+            DOMAIN,
+            "beward_open_door",
+            async_beward_open_door,
+            schema=BEWARD_OPEN_DOOR_SCHEMA
+        )
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
@@ -870,7 +953,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "start_recording", "stop_recording", "timed_recording", "get_recordings",
             "delete_recording", "record_and_send_telegram", "diagnose_rtsp", 
             "diagnose_telegram", "test_telegram", "get_recordings_stats",
-            "delete_all_recordings", "get_video_thumbnail", "record_with_osd", "list_fonts"
+            "delete_all_recordings", "get_video_thumbnail", "record_with_osd", "list_fonts",
+            "beward_open_door"
         ]
         for service in services:
             if hass.services.has_service(DOMAIN, service):
@@ -883,9 +967,22 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     _LOGGER.debug("Migrating from version %s", config_entry.version)
     
     if config_entry.version == 1:
-        return True
+        # Миграция с версии 1 на 2
+        new_data = {**config_entry.data}
+        
+        # Добавляем тип устройства для старых записей
+        if CONF_DEVICE_TYPE not in new_data:
+            new_data[CONF_DEVICE_TYPE] = DEVICE_TYPE_OPENIPC
+        
+        # Обновляем запись правильным способом
+        hass.config_entries.async_update_entry(
+            config_entry, 
+            data=new_data,
+            version=2
+        )
+        _LOGGER.info("✅ Migrated entry from version 1 to 2")
     
-    return False
+    return True
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle removal of an entry."""
@@ -931,6 +1028,14 @@ class OpenIPCDataUpdateCoordinator(DataUpdateCoordinator):
             self.password,
             camera_name
         )
+        
+        # Специфичные для бренда клиенты
+        self.beward = None
+        self.vivotek = None
+        
+        # Флаги для recorder
+        self.is_beward = False
+        self.is_vivotek = False
         
         # Атрибуты для записи
         self.recording_duration = 60
@@ -1245,6 +1350,16 @@ class OpenIPCDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def async_start_recording(self):
         """Start recording on camera SD card."""
+        # Для Beward не поддерживается
+        if self.is_beward:
+            _LOGGER.warning("Recording not supported for Beward devices")
+            return False
+            
+        # Для Vivotek не поддерживается
+        if self.is_vivotek:
+            _LOGGER.warning("Recording not supported for Vivotek devices")
+            return False
+            
         _LOGGER.info("Starting recording on camera %s", self.host)
         
         endpoints = [
@@ -1264,6 +1379,16 @@ class OpenIPCDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def async_stop_recording(self):
         """Stop recording on camera SD card."""
+        # Для Beward не поддерживается
+        if self.is_beward:
+            _LOGGER.warning("Recording not supported for Beward devices")
+            return False
+            
+        # Для Vivotek не поддерживается
+        if self.is_vivotek:
+            _LOGGER.warning("Recording not supported for Vivotek devices")
+            return False
+            
         _LOGGER.info("Stopping recording on camera %s", self.host)
         
         if self._recording_task:
@@ -1331,6 +1456,11 @@ class OpenIPCDataUpdateCoordinator(DataUpdateCoordinator):
             self._recording_end_time = self.hass.loop.time() + duration
             return True
         else:
+            # Для Beward и Vivotek не поддерживается запись на SD
+            if self.is_beward or self.is_vivotek:
+                _LOGGER.warning("SD card recording not supported for this device")
+                return False
+                
             await self.async_stop_recording()
             await asyncio.sleep(1)
             

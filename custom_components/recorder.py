@@ -51,6 +51,45 @@ class OpenIPCRecorder:
         # Создаем папку для записей, если её нет
         self.hass.async_create_task(self._ensure_folder_exists_async())
         
+        # Определяем тип камеры
+        self.is_beward = False
+        self.is_vivotek = False
+        self.beward_device = None
+        self.vivotek_device = None
+        
+        # Проверяем тип камеры
+        if hass.data.get(DOMAIN):
+            for entry_id, coordinator in hass.data[DOMAIN].items():
+                if entry_id != "config":
+                    if hasattr(coordinator, 'beward') and coordinator.beward and coordinator.beward.host == host:
+                        self.is_beward = True
+                        self.beward_device = coordinator.beward
+                        _LOGGER.info(f"✅ Camera {camera_name} identified as Beward DS07P-LP at {host}")
+                        break
+                    if hasattr(coordinator, 'vivotek') and coordinator.vivotek and coordinator.vivotek.host == host:
+                        self.is_vivotek = True
+                        self.vivotek_device = coordinator.vivotek
+                        _LOGGER.info(f"✅ Camera {camera_name} identified as Vivotek SD9364-EHL at {host}")
+                        break
+                else:
+                    # Проверяем также через флаги в координаторе
+                    if hasattr(coordinator, 'is_beward') and coordinator.is_beward and coordinator.host == host:
+                        self.is_beward = True
+                        _LOGGER.info(f"✅ Camera {camera_name} identified as Beward via flag at {host}")
+                    if hasattr(coordinator, 'is_vivotek') and coordinator.is_vivotek and coordinator.host == host:
+                        self.is_vivotek = True
+                        _LOGGER.info(f"✅ Camera {camera_name} identified as Vivotek via flag at {host}")
+        
+        # Принудительное определение по IP для известных камер
+        if host == "192.168.1.10":
+            self.is_beward = True
+            self.is_vivotek = False
+            _LOGGER.info(f"🔧 FORCED: Camera at {host} set as Beward DS07P-LP")
+        elif host == "192.168.1.8":
+            self.is_beward = False
+            self.is_vivotek = True
+            _LOGGER.info(f"🔧 FORCED: Camera at {host} set as Vivotek SD9364-EHL")
+        
         if not PIL_AVAILABLE:
             _LOGGER.error("PIL not available. OSD will not work. Please install Pillow")
         
@@ -193,7 +232,6 @@ class OpenIPCRecorder:
             
             # Получаем параметры из osd_config
             position = osd_config.get('position', 'top_left')
-            # Увеличиваем размер шрифта в 5 раз
             base_font_size = int(osd_config.get('font_size', 24))
             font_size = base_font_size * 5
             
@@ -309,15 +347,15 @@ class OpenIPCRecorder:
                 line_height = bbox[3] - bbox[1]
                 line_widths.append(line_width)
                 line_heights.append(line_height)
-                _LOGGER.debug(f"Line '{line}': width={line_width}, height={line_height}")
+                _LOGGER.debug(f"Line '{line[:30]}...' - width: {line_width}, height: {line_height}")
             
-            total_height = sum(line_heights) + 10 * (len(lines) - 1)
-            max_width = max(line_widths)
+            total_height = sum(line_heights) + 5 * (len(lines) - 1)
+            max_width = max(line_widths) if line_widths else 0
             
-            _LOGGER.info(f"Text block: width={max_width}, height={total_height}")
+            _LOGGER.debug(f"Text block: width={max_width}, height={total_height}")
             
-            # Вычисляем позицию
-            padding = 20
+            # Вычисляем позицию с отступом
+            padding = 15
             
             if position == "top_left":
                 x = padding
@@ -334,29 +372,33 @@ class OpenIPCRecorder:
             elif position == "center":
                 x = (img_width - max_width) // 2
                 y = (img_height - total_height) // 2
+            elif position == "top_center":
+                x = (img_width - max_width) // 2
+                y = padding
+            elif position == "bottom_center":
+                x = (img_width - max_width) // 2
+                y = img_height - total_height - padding
             else:
                 x = padding
                 y = padding
             
-            _LOGGER.info(f"Text position: x={x}, y={y}")
+            _LOGGER.debug(f"Text position: x={x}, y={y}")
             
-            # Рисуем текст
+            # Рисуем текст на изображении
             current_y = y
             for i, line in enumerate(lines):
                 bbox = draw.textbbox((x, current_y), line, font=font)
-                expanded_bbox = (
-                    bbox[0] - 10,
-                    bbox[1] - 10,
-                    bbox[2] + 10,
-                    bbox[3] + 10
+                bg_bbox = (
+                    bbox[0] - 5,
+                    bbox[1] - 2,
+                    bbox[2] + 5,
+                    bbox[3] + 2
                 )
-                draw.rectangle(expanded_bbox, fill=(0, 0, 0, 220))
-                
+                draw.rectangle(bg_bbox, fill=(0, 0, 0, 180))
                 draw.text((x, current_y), line, font=font, fill=rgb_color)
-                
-                current_y += line_heights[i] + 10
+                current_y += line_heights[i] + 5
             
-            await asyncio.to_thread(img.save, image_path)
+            await asyncio.to_thread(img.save, image_path, "JPEG", quality=95)
             _LOGGER.info(f"✅ Text added to {image_path.name} using font {font_path.name} from integration")
             
         except Exception as err:
@@ -364,6 +406,30 @@ class OpenIPCRecorder:
 
     async def _capture_snapshot(self, snapshot_path: Path):
         """Capture a single snapshot from camera."""
+        # Для Beward используем специальный метод
+        if self.is_beward and self.beward_device:
+            _LOGGER.debug("Camera is Beward, using Beward snapshot method")
+            snapshot = await self.beward_device.async_get_snapshot()
+            if snapshot:
+                async with aiofiles.open(snapshot_path, 'wb') as f:
+                    await f.write(snapshot)
+                _LOGGER.info(f"✅ Snapshot saved via Beward method: {snapshot_path.name}")
+                return True
+            else:
+                _LOGGER.warning("Beward snapshot method failed, falling back to HTTP")
+        
+        # Для Vivotek используем специальный метод
+        if self.is_vivotek and self.vivotek_device:
+            _LOGGER.debug("Camera is Vivotek, using Vivotek snapshot method")
+            snapshot = await self.vivotek_device.async_get_snapshot()
+            if snapshot:
+                async with aiofiles.open(snapshot_path, 'wb') as f:
+                    await f.write(snapshot)
+                _LOGGER.info(f"✅ Snapshot saved via Vivotek method: {snapshot_path.name}")
+                return True
+            else:
+                _LOGGER.warning("Vivotek snapshot method failed, falling back to HTTP")
+        
         # Пробуем разные возможные URL для снимка
         snapshot_urls = [
             # Стандартные OpenIPC URL
@@ -401,26 +467,6 @@ class OpenIPCRecorder:
                 last_error = err
                 _LOGGER.debug(f"Error with URL {url}: {err}")
                 continue
-        
-        # Если ничего не сработало, пробуем через координатор получить URL из конфига
-        try:
-            # Пробуем получить информацию о камере из координатора
-            if self.hass.data.get(DOMAIN):
-                for entry_id, coordinator in self.hass.data[DOMAIN].items():
-                    if entry_id != "config" and hasattr(coordinator, 'host'):
-                        # Пробуем прямой доступ к JPG через основной URL
-                        url = f"http://{coordinator.host}:{coordinator.port}/image.jpg"
-                        _LOGGER.debug(f"Trying coordinator URL: {url}")
-                        async with self.session.get(url, auth=self.auth, timeout=10) as response:
-                            if response.status == 200:
-                                data = await response.read()
-                                if len(data) > 1000:
-                                    async with aiofiles.open(snapshot_path, 'wb') as f:
-                                        await f.write(data)
-                                    _LOGGER.info(f"✅ Snapshot saved from coordinator URL")
-                                    return True
-        except Exception as err:
-            last_error = err
         
         _LOGGER.error(f"Failed to capture snapshot from any URL. Last error: {last_error}")
         raise Exception(f"Failed to capture snapshot: {last_error}")
@@ -593,19 +639,39 @@ class OpenIPCRecorder:
             "ffmpeg",
             "-rtsp_transport", "tcp",
             "-i", rtsp_url,
-            "-t", "1",
+            "-t", "2",  # Увеличим время проверки до 2 секунд
             "-f", "null",
             "-"
         ]
         try:
+            _LOGGER.info(f"🔍 Checking RTSP availability: {rtsp_url}")
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
-            _, stderr = await process.communicate()
-            return process.returncode == 0
-        except:
+            stdout, stderr = await process.communicate()
+            success = process.returncode == 0
+            
+            if success:
+                _LOGGER.info(f"✅ RTSP stream available: {rtsp_url}")
+            else:
+                _LOGGER.error(f"❌ RTSP stream not available: {rtsp_url}")
+                if stderr:
+                    error_text = stderr.decode()[:500]
+                    _LOGGER.error(f"FFmpeg error details: {error_text}")
+                    
+                    # Проверим специфичные ошибки
+                    if "401 Unauthorized" in error_text:
+                        _LOGGER.error("Authentication failed - check username/password")
+                    elif "Connection refused" in error_text:
+                        _LOGGER.error("Connection refused - camera might be off or wrong port")
+                    elif "No such file" in error_text:
+                        _LOGGER.error("RTSP path not found - wrong URL path")
+            
+            return success
+        except Exception as err:
+            _LOGGER.error(f"RTSP check error: {err}")
             return False
 
     async def record_rtsp_stream(self, duration: int, stream_profile: str = "main", with_audio: bool = False) -> dict:
@@ -615,46 +681,70 @@ class OpenIPCRecorder:
         filename = self._generate_filename(duration)
         filepath = self.record_folder / filename
         
-        # Проверяем разные возможные RTSP пути
-        rtsp_paths = [
-            "/stream=0",
-            "/av0_0",
-            "/live",
-            "/h264",
-            "/video",
-            "/ch0",
-            "/cam/realmonitor?channel=1&subtype=0",
-        ]
+        # Сохраняем оригинальные флаги
+        original_beward = self.is_beward
+        original_vivotek = self.is_vivotek
         
-        if stream_profile == "main":
-            stream_path = "/stream=0"
+        # Принудительное определение по IP для известных камер
+        if self.host == "192.168.1.10":
+            self.is_beward = True
+            self.is_vivotek = False
+            _LOGGER.info(f"🔧 FORCED in record_rtsp_stream: Camera at {self.host} set as Beward DS07P-LP")
+        elif self.host == "192.168.1.8":
+            self.is_beward = False
+            self.is_vivotek = True
+            _LOGGER.info(f"🔧 FORCED in record_rtsp_stream: Camera at {self.host} set as Vivotek SD9364-EHL")
+        
+        _LOGGER.debug(f"DEBUG: is_beward={self.is_beward}, is_vivotek={self.is_vivotek}")
+        
+        # Определяем тип камеры и соответствующий RTSP путь
+        rtsp_url = None
+        check_url = None
+        
+        # Для Beward DS07P-LP (одноабонентская модель)
+        if self.is_beward:
+            if stream_profile == "main":
+                # Beward требует порт 554 и путь /av0_0
+                rtsp_url = f"rtsp://{self.username}:{self.password}@{self.host}:554/av0_0"
+            else:
+                rtsp_url = f"rtsp://{self.username}:{self.password}@{self.host}:554/av0_1"
+            _LOGGER.info("✅ Using Beward DS07P-LP RTSP URL: %s", rtsp_url)
+            check_url = rtsp_url
+        
+        # Для Vivotek SD9364-EHL (PTZ камера)
+        elif self.is_vivotek:
+            if stream_profile == "main":
+                rtsp_url = f"rtsp://{self.username}:{self.password}@{self.host}:554/live.sdp"
+            else:
+                rtsp_url = f"rtsp://{self.username}:{self.password}@{self.host}:554/live2.sdp"
+            _LOGGER.info("✅ Using Vivotek SD9364-EHL RTSP URL: %s", rtsp_url)
+            check_url = rtsp_url
+        
+        # Для OpenIPC
         else:
-            stream_path = "/stream=1"
-        
-        rtsp_url = f"rtsp://{self.username}:{self.password}@{self.host}:554{stream_path}"
+            if stream_profile == "main":
+                stream_path = "/stream=0"
+            else:
+                stream_path = "/stream=1"
+            rtsp_url = f"rtsp://{self.username}:{self.password}@{self.host}:554{stream_path}"
+            _LOGGER.info("Using OpenIPC RTSP URL: %s", rtsp_url)
+            check_url = rtsp_url
         
         _LOGGER.info("Starting RTSP recording to %s for %d seconds (URL: %s)", 
                     filepath, duration, rtsp_url)
         
-        # Сначала проверяем доступность RTSP
-        if not await self._check_rtsp_available(rtsp_url):
-            _LOGGER.error("RTSP stream not available at %s", rtsp_url)
-            # Пробуем альтернативные пути
-            for alt_path in rtsp_paths:
-                if alt_path == stream_path:
-                    continue
-                alt_url = f"rtsp://{self.username}:{self.password}@{self.host}:554{alt_path}"
-                _LOGGER.info("Trying alternative RTSP URL: %s", alt_url)
-                if await self._check_rtsp_available(alt_url):
-                    rtsp_url = alt_url
-                    stream_path = alt_path
-                    _LOGGER.info("Found working RTSP URL: %s", alt_url)
-                    break
-            else:
-                return {
-                    "success": False,
-                    "error": "No working RTSP URL found"
-                }
+        # Проверяем доступность RTSP с правильным URL
+        if not await self._check_rtsp_available(check_url):
+            _LOGGER.error("❌ RTSP stream not available at %s", check_url)
+            
+            # Восстанавливаем оригинальные флаги
+            self.is_beward = original_beward
+            self.is_vivotek = original_vivotek
+            
+            return {
+                "success": False,
+                "error": "RTSP stream not available"
+            }
         
         # Базовые параметры ffmpeg
         cmd = [
@@ -708,47 +798,19 @@ class OpenIPCRecorder:
                     "rtsp_url": rtsp_url
                 }
                 _LOGGER.info("RTSP recording completed: %s", filename)
+                
+                # Восстанавливаем оригинальные флаги
+                self.is_beward = original_beward
+                self.is_vivotek = original_vivotek
+                
                 return result
             else:
                 error_msg = stderr.decode() if stderr else "Unknown error"
                 _LOGGER.error("FFmpeg error: %s", error_msg)
                 
-                if with_audio and "codec not currently supported" in error_msg:
-                    _LOGGER.info("Retrying without audio...")
-                    return await self.record_rtsp_stream(duration, stream_profile, False)
-                
-                if "Connection refused" in error_msg or "Connection timed out" in error_msg:
-                    _LOGGER.info("Retrying with UDP transport...")
-                    cmd = [
-                        "ffmpeg",
-                        "-y",
-                        "-t", str(duration),
-                        "-rtsp_transport", "udp",
-                        "-i", rtsp_url,
-                        "-an",
-                        "-c:v", "copy",
-                        "-f", "mp4",
-                        str(filepath)
-                    ]
-                    process = await asyncio.create_subprocess_exec(
-                        *cmd,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
-                    stdout, stderr = await process.communicate()
-                    if process.returncode == 0:
-                        file_size = await asyncio.to_thread(os.path.getsize, filepath) if await asyncio.to_thread(filepath.exists) else 0
-                        return {
-                            "success": True,
-                            "filepath": str(filepath),
-                            "filename": filename,
-                            "size": file_size,
-                            "duration": duration,
-                            "camera": self.camera_name,
-                            "timestamp": datetime.now().isoformat(),
-                            "url": f"/media/local/openipc_recordings/{self.camera_name}/{filename}",
-                            "method": "rtsp_udp"
-                        }
+                # Восстанавливаем оригинальные флаги
+                self.is_beward = original_beward
+                self.is_vivotek = original_vivotek
                 
                 return {
                     "success": False,
@@ -757,6 +819,11 @@ class OpenIPCRecorder:
                 
         except Exception as err:
             _LOGGER.error("RTSP recording failed: %s", err)
+            
+            # Восстанавливаем оригинальные флаги
+            self.is_beward = original_beward
+            self.is_vivotek = original_vivotek
+            
             return {
                 "success": False,
                 "error": str(err)
@@ -1241,33 +1308,58 @@ class OpenIPCRecorder:
     async def diagnose_rtsp(self) -> dict:
         """Diagnose RTSP stream."""
         results = {}
-        rtsp_paths = [
-            "/stream=0",
-            "/stream=1", 
-            "/av0_0",
-            "/av0_1",
-            "/live",
-            "/live0",
-            "/live1",
-            "/h264",
-            "/h265",
-            "/video",
-            "/video0",
-            "/video1",
-            "/ch0",
-            "/ch1",
-            "/cam/realmonitor?channel=1&subtype=0",
-            "/cam/realmonitor?channel=1&subtype=1",
-            "/media/video1",
-            "/media/video2",
-            "/mjpeg/1",
-            "/mjpeg/2",
-            "/bytestream",
-            "/",
-        ]
+        
+        # Для Beward используем специфичные пути
+        if self.is_beward:
+            rtsp_paths = [
+                "/av0_0",
+                "/av0_1",
+                "/h264",
+                "/live",
+                "/stream0",
+            ]
+            port = 554
+        # Для Vivotek
+        elif self.is_vivotek:
+            rtsp_paths = [
+                "/live.sdp",
+                "/live2.sdp",
+                "/h264",
+                "/h264.sdp",
+            ]
+            port = 554
+        # Для OpenIPC
+        else:
+            rtsp_paths = [
+                "/stream=0",
+                "/stream=1",
+                "/av0_0",
+                "/av0_1",
+                "/live.sdp",
+                "/live2.sdp",
+                "/live",
+                "/live0",
+                "/live1",
+                "/h264",
+                "/h265",
+                "/video",
+                "/video0",
+                "/video1",
+                "/ch0",
+                "/ch1",
+                "/cam/realmonitor?channel=1&subtype=0",
+                "/cam/realmonitor?channel=1&subtype=1",
+                "/media/video1",
+                "/media/video2",
+                "/mjpeg/1",
+                "/mjpeg/2",
+                "/bytestream",
+                "/",
+            ]
+            port = 554
         
         for path in rtsp_paths:
-            url = f"rtsp://{self.username}:{self.password}@{self.host}:554{path}"
+            url = f"rtsp://{self.username}:{self.password}@{self.host}:{port}{path}"
             try:
                 _LOGGER.debug("Testing RTSP URL: %s", url)
                 cmd = [

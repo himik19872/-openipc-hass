@@ -5,7 +5,15 @@ import asyncio
 from homeassistant.components.button import ButtonEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, API_REBOOT, RECORD_START, RECORD_STOP
+from .const import (
+    DOMAIN, 
+    API_REBOOT, 
+    RECORD_START, 
+    RECORD_STOP,
+    CONF_DEVICE_TYPE,
+    DEVICE_TYPE_BEWARD,
+    DEVICE_TYPE_VIVOTEK,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,13 +30,16 @@ RECORDING_PRESETS = {
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up OpenIPC buttons."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
+    device_type = entry.data.get(CONF_DEVICE_TYPE, "openipc")
     
-    entities = [
-        # Основные кнопки
+    entities = []
+    
+    # Стандартные кнопки для всех типов
+    entities.extend([
         OpenIPCButton(coordinator, entry, "Reboot", "reboot", API_REBOOT, "mdi:restart"),
         OpenIPCButton(coordinator, entry, "Start Recording (Camera SD)", "record_start", RECORD_START, "mdi:record-rec"),
         OpenIPCButton(coordinator, entry, "Stop Recording", "record_stop", RECORD_STOP, "mdi:stop"),
-    ]
+    ])
     
     # Кнопки для записи на SD карту камеры
     for name, duration in RECORDING_PRESETS.items():
@@ -92,6 +103,24 @@ async def async_setup_entry(hass, entry, async_add_entities):
             )
         )
     
+    # Специфичные кнопки для Beward
+    if device_type == DEVICE_TYPE_BEWARD and coordinator.beward:
+        entities.extend([
+            BewardOpenDoorButton(coordinator, entry, 1, "Main Door"),
+            BewardOpenDoorButton(coordinator, entry, 2, "Secondary Door"),
+            BewardRelayButton(coordinator, entry, 1),
+            BewardRelayButton(coordinator, entry, 2),
+        ])
+        _LOGGER.info("✅ Added Beward-specific buttons for %s", entry.data.get('name'))
+    
+    # Специфичные кнопки для Vivotek
+    elif device_type == DEVICE_TYPE_VIVOTEK and coordinator.vivotek:
+        entities.extend([
+            VivotekRebootButton(coordinator, entry),
+        ])
+        # Кнопки PTZ будут добавлены через отдельную интеграцию onvif-ptz
+        _LOGGER.info("✅ Added Vivotek-specific buttons for %s", entry.data.get('name'))
+    
     async_add_entities(entities)
 
 class OpenIPCButton(CoordinatorEntity, ButtonEntity):
@@ -131,6 +160,7 @@ class OpenIPCButton(CoordinatorEntity, ButtonEntity):
             "sw_version": parsed.get("firmware", "Unknown"),
         }
 
+
 class OpenIPCRecordTimerButton(CoordinatorEntity, ButtonEntity):
     """Button for timed recording on camera SD card."""
 
@@ -163,6 +193,7 @@ class OpenIPCRecordTimerButton(CoordinatorEntity, ButtonEntity):
             "model": parsed.get("model", "Camera"),
             "sw_version": parsed.get("firmware", "Unknown"),
         }
+
 
 class OpenIPCHARecordButton(CoordinatorEntity, ButtonEntity):
     """Button for recording to Home Assistant media folder using snapshots."""
@@ -201,6 +232,7 @@ class OpenIPCHARecordButton(CoordinatorEntity, ButtonEntity):
             "sw_version": parsed.get("firmware", "Unknown"),
         }
 
+
 class OpenIPCRTSPRecordButton(CoordinatorEntity, ButtonEntity):
     """Button for recording to Home Assistant media folder using RTSP stream."""
 
@@ -238,6 +270,7 @@ class OpenIPCRTSPRecordButton(CoordinatorEntity, ButtonEntity):
             "sw_version": parsed.get("firmware", "Unknown"),
         }
 
+
 class OpenIPCTelegramRecordButton(CoordinatorEntity, ButtonEntity):
     """Button for recording and sending to Telegram."""
 
@@ -258,7 +291,6 @@ class OpenIPCTelegramRecordButton(CoordinatorEntity, ButtonEntity):
         _LOGGER.info("Recording %d seconds and sending to Telegram for %s", 
                      self.duration, self.entry.data.get('name'))
         
-        # Используем новый метод для записи и отправки в Telegram
         if hasattr(self.coordinator, 'async_record_and_send_telegram'):
             await self.coordinator.async_record_and_send_telegram(
                 self.duration, 
@@ -278,4 +310,103 @@ class OpenIPCTelegramRecordButton(CoordinatorEntity, ButtonEntity):
             "manufacturer": "OpenIPC",
             "model": parsed.get("model", "Camera"),
             "sw_version": parsed.get("firmware", "Unknown"),
+        }
+
+
+# ==================== Beward Specific Buttons ====================
+
+class BewardOpenDoorButton(CoordinatorEntity, ButtonEntity):
+    """Button to open Beward door."""
+
+    def __init__(self, coordinator, entry, relay_id: int, name_suffix: str):
+        """Initialize the button."""
+        super().__init__(coordinator)
+        self.coordinator = coordinator
+        self.entry = entry
+        self.relay_id = relay_id
+        self._attr_name = f"{entry.data.get('name', 'Beward')} Open {name_suffix}"
+        self._attr_unique_id = f"{entry.entry_id}_beward_open_door_{relay_id}"
+        self._attr_icon = "mdi:door-open"
+
+    async def async_press(self) -> None:
+        """Handle the button press."""
+        if self.coordinator.beward:
+            _LOGGER.info("🚪 Opening Beward door (relay %d)", self.relay_id)
+            await self.coordinator.beward.async_open_door(main=(self.relay_id == 1))
+        else:
+            _LOGGER.error("Beward device not available")
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return {
+            "identifiers": {(DOMAIN, self.entry.entry_id)},
+            "name": self.entry.data.get("name", "Beward Doorbell"),
+            "manufacturer": "Beward",
+            "model": "Doorbell",
+        }
+
+
+class BewardRelayButton(CoordinatorEntity, ButtonEntity):
+    """Button to activate Beward relay."""
+
+    def __init__(self, coordinator, entry, relay_id: int):
+        """Initialize the button."""
+        super().__init__(coordinator)
+        self.coordinator = coordinator
+        self.entry = entry
+        self.relay_id = relay_id
+        self._attr_name = f"{entry.data.get('name', 'Beward')} Relay {relay_id}"
+        self._attr_unique_id = f"{entry.entry_id}_beward_relay_{relay_id}"
+        self._attr_icon = "mdi:electric-switch"
+
+    async def async_press(self) -> None:
+        """Handle the button press."""
+        if self.coordinator.beward:
+            _LOGGER.info("⚡ Activating Beward relay %d", self.relay_id)
+            await self.coordinator.beward.async_activate_relay(self.relay_id, 1.0)
+        else:
+            _LOGGER.error("Beward device not available")
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return {
+            "identifiers": {(DOMAIN, self.entry.entry_id)},
+            "name": self.entry.data.get("name", "Beward Doorbell"),
+            "manufacturer": "Beward",
+            "model": "Doorbell",
+        }
+
+
+# ==================== Vivotek Specific Buttons ====================
+
+class VivotekRebootButton(CoordinatorEntity, ButtonEntity):
+    """Button to reboot Vivotek camera."""
+
+    def __init__(self, coordinator, entry):
+        """Initialize the button."""
+        super().__init__(coordinator)
+        self.coordinator = coordinator
+        self.entry = entry
+        self._attr_name = f"{entry.data.get('name', 'Vivotek')} Reboot"
+        self._attr_unique_id = f"{entry.entry_id}_vivotek_reboot"
+        self._attr_icon = "mdi:restart"
+
+    async def async_press(self) -> None:
+        """Handle the button press."""
+        if self.coordinator.vivotek:
+            _LOGGER.info("🔄 Rebooting Vivotek camera")
+            # Здесь нужно добавить логику перезагрузки Vivotek
+        else:
+            _LOGGER.error("Vivotek device not available")
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return {
+            "identifiers": {(DOMAIN, self.entry.entry_id)},
+            "name": self.entry.data.get("name", "Vivotek Camera"),
+            "manufacturer": "Vivotek",
+            "model": "PTZ Camera",
         }

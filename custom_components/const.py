@@ -1,6 +1,10 @@
 """Constants for OpenIPC integration."""
+from homeassistant.const import Platform
 
 DOMAIN = "openipc"
+PLATFORMS = ["camera", "binary_sensor", "sensor", "switch", "button", "media_player", "select"]
+
+# Default values
 DEFAULT_PORT = 80
 DEFAULT_RTSP_PORT = 554
 DEFAULT_USERNAME = "root"
@@ -11,6 +15,12 @@ CONF_RTSP_PORT = "rtsp_port"
 CONF_STREAM_PROFILE = "stream_profile"
 CONF_RECORD_PATH = "record_path"
 CONF_RECORD_FORMAT = "record_format"
+
+# Device types
+CONF_DEVICE_TYPE = "device_type"
+DEVICE_TYPE_OPENIPC = "openipc"
+DEVICE_TYPE_BEWARD = "beward"
+DEVICE_TYPE_VIVOTEK = "vivotek"
 
 # Media paths
 MEDIA_RECORD_PATH = "openipc_recordings"
@@ -143,6 +153,7 @@ SSDP_MANUFACTURER = "OpenIPC"
 # mDNS service types
 MDNS_SERVICE = "_http._tcp.local."
 MDNS_DEVICE_TYPE = "_openipc._tcp.local."
+MDNS_BEWARD = "_beward._tcp.local."
 
 # Broadcast discovery
 BROADCAST_PORTS = [80, 8080, 81]
@@ -200,3 +211,24 @@ DEFAULT_OSD_FONT_SIZE = 24
 DEFAULT_OSD_COLOR = "white"
 DEFAULT_OSD_BG_COLOR = "black@0.5"
 DEFAULT_OSD_OPACITY = 0.7
+
+# Beward specific endpoints
+BEWARD_SNAPSHOT = "/cgi-bin/image.cgi"
+BEWARD_MJPEG = "/cgi-bin/video.cgi"
+BEWARD_RTSP_MAIN = "/av0_0"
+BEWARD_RTSP_SUB = "/av0_1"
+BEWARD_OPEN_DOOR = "/cgi-bin/intercom_cgi?action=maindoor"
+BEWARD_OPEN_DOOR_ALT = "/cgi-bin/intercom_cgi?action=altdoor"
+BEWARD_STATUS = "/cgi-bin/status.cgi"
+
+# Vivotek specific endpoints
+VIVOTEK_SNAPSHOT = "/cgi-bin/video.jpg"
+VIVOTEK_MJPEG = "/cgi-bin/viewer/video.mjpg"
+VIVOTEK_RTSP_MAIN = "/live.sdp"
+VIVOTEK_RTSP_SUB = "/live2.sdp"
+
+# Beward events
+BEWARD_EVENT_MOTION = "motion"
+BEWARD_EVENT_SENSOR = "sensor"
+BEWARD_EVENT_SOUND = "sound"
+BEWARD_EVENT_ONLINE = "online"

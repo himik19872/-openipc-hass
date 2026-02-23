@@ -3,16 +3,23 @@
   "name": "OpenIPC Camera",
   "codeowners": ["@himik19872"],
   "config_flow": true,
-  "dependencies": ["stream", "ssdp", "zeroconf", "telegram_bot", "media_player"],
+  "dependencies": [
+    "stream",
+    "ssdp",
+    "zeroconf",
+    "telegram_bot",
+    "media_player"
+  ],
   "documentation": "https://github.com/himik19872/openipc-hass",
   "integration_type": "device",
   "iot_class": "local_polling",
   "requirements": [
     "aiohttp>=3.8.0",
     "async-timeout>=4.0.0",
-    "aiofiles>=23.2.0"
+    "aiofiles>=23.2.0",
+    "beward==1.1.4"
   ],
-  "version": "1.0.0",
+  "version": "1.2.0",
   "ssdp": [
     {
       "st": "urn:schemas-upnp-org:device:Basic:1",
@@ -21,6 +28,7 @@
   ],
   "zeroconf": [
     "_openipc._tcp.local.",
-    "_http._tcp.local."
+    "_http._tcp.local.",
+    "_beward._tcp.local."
   ]
 }
