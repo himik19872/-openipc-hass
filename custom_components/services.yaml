@@ -296,9 +296,6 @@ get_video_thumbnail:
       selector:
         text:
         
-        
-# Добавьте в конец файла services.yaml
-
 record_with_osd:
   name: Record video with OSD
   description: Record video with on-screen display of sensor data
@@ -392,3 +389,197 @@ record_with_osd:
       default: false
       selector:
         boolean:
+
+# Audio services for Beward
+beward_play_beep:
+  name: Play beep
+  description: Play a beep sound on Beward doorbell
+  target:
+    entity:
+      integration: openipc
+      domain: media_player
+
+beward_play_ringtone:
+  name: Play ringtone
+  description: Play a ringtone on Beward doorbell
+  target:
+    entity:
+      integration: openipc
+      domain: media_player
+
+beward_play_audio:
+  name: Play audio from URL
+  description: Play audio file from URL on Beward doorbell
+  target:
+    entity:
+      integration: openipc
+      domain: media_player
+  fields:
+    url:
+      name: Audio URL
+      description: URL to audio file (WAV, G.711 format)
+      required: true
+      example: "http://example.com/sound.wav"
+      selector:
+        text:
+
+beward_set_volume:
+  name: Set volume
+  description: Set speaker volume (0-100)
+  target:
+    entity:
+      integration: openipc
+      domain: media_player
+  fields:
+    volume:
+      name: Volume
+      description: Volume level (0-100)
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+
+beward_enable_audio:
+  name: Enable audio
+  description: Enable or disable audio
+  target:
+    entity:
+      integration: openipc
+      domain: media_player
+  fields:
+    enable:
+      name: Enable
+      description: True to enable, False to disable
+      required: true
+      selector:
+        boolean:
+        
+ # LNPR Services
+lnpr_get_list:
+  name: Get LNPR whitelist
+  description: Get list of authorized license plates
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+
+lnpr_add_plate:
+  name: Add license plate
+  description: Add license plate to whitelist
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+  fields:
+    number:
+      name: Plate number
+      description: License plate number
+      required: true
+      example: "A123BC77"
+      selector:
+        text:
+    begin:
+      name: Begin date
+      description: Start date of validity (YYYY-MM-DD)
+      required: false
+      example: "2024-01-01"
+      selector:
+        text:
+    end:
+      name: End date
+      description: End date of validity (YYYY-MM-DD)
+      required: false
+      example: "2025-12-31"
+      selector:
+        text:
+    notify:
+      name: Notify
+      description: Enable email notification
+      required: false
+      default: false
+      selector:
+        boolean:
+    note:
+      name: Note
+      description: Additional note (max 20 chars)
+      required: false
+      example: "My car"
+      selector:
+        text:
+
+lnpr_delete_plate:
+  name: Delete license plate
+  description: Remove license plate from whitelist
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+  fields:
+    number:
+      name: Plate number
+      description: License plate number to delete
+      required: true
+      example: "A123BC77"
+      selector:
+        text:
+
+lnpr_export_events:
+  name: Export LNPR events
+  description: Export license plate recognition events
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+  fields:
+    days:
+      name: Days
+      description: Number of days to export (default 7)
+      required: false
+      default: 7
+      selector:
+        number:
+          min: 1
+          max: 30
+          unit_of_measurement: days
+
+lnpr_clear_events:
+  name: Clear LNPR events
+  description: Clear license plate recognition event log
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+
+lnpr_clear_list:
+  name: Clear LNPR whitelist
+  description: Remove all license plates from whitelist
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+
+lnpr_get_picture:
+  name: Get LNPR picture
+  description: Get picture of recognized license plate
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+  fields:
+    time:
+      name: Event time
+      description: Event time in format "YYYY-MM-DD HH:MM:SS-N"
+      required: true
+      example: "2024-01-15 14:30:25-1"
+      selector:
+        text:
+    filename:
+      name: Filename
+      description: Where to save the picture
+      required: true
+      example: "/config/www/lnpr.jpg"
+      selector:
+        text:
+        

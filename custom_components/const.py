@@ -85,6 +85,18 @@ ALT_API_SD_INFO = "/cgi-bin/sd_info"
 ALT_API_MOTION = "/cgi-bin/motion_detection"
 ALT_API_REBOOT = "/cgi-bin/reboot"
 
+# LNPR Endpoints (для распознавания номеров)
+LNPR_STATE = "/cgi-bin/lnprstate_cgi"
+LNPR_LIST = "/cgi-bin/lnpr_cgi?action=list"
+LNPR_ADD = "/cgi-bin/lnpr_cgi?action=add"
+LNPR_EDIT = "/cgi-bin/lnpr_cgi?action=edit"
+LNPR_DELETE = "/cgi-bin/lnpr_cgi?action=remove"
+LNPR_CLEAR = "/cgi-bin/lnpr_cgi?action=clear"
+LNPR_EXPORT = "/cgi-bin/lnprevent_cgi?action=export"
+LNPR_CLEAR_LOG = "/cgi-bin/lnprevent_cgi?action=clear"
+LNPR_CURRENT = "/cgi-bin/lnprevent_cgi?action=current"
+LNPR_GET_PIC = "/cgi-bin/lnprevent_cgi?action=getpic"
+
 # Сенсоры
 SENSOR_TYPES = {
     "uptime_seconds": {"name": "Uptime", "unit": "s", "icon": "mdi:timer"},
@@ -119,6 +131,13 @@ SENSOR_TYPES = {
     "record_last_file": {"name": "Last Recording", "icon": "mdi:video"},
     "recordings_count": {"name": "Total Recordings", "icon": "mdi:counter"},
     "recordings_size": {"name": "Recordings Size", "unit": "MB", "icon": "mdi:database"},
+    
+    # LNPR сенсоры - ВАЖНО: строковые сенсоры, device_class = None
+    "lnpr_last_number": {"name": "Last Plate", "unit": None, "icon": "mdi:car", "device_class": None},
+    "lnpr_last_direction": {"name": "Last Direction", "unit": None, "icon": "mdi:arrow-decision", "device_class": None},
+    "lnpr_last_time": {"name": "Last Recognition Time", "unit": None, "icon": "mdi:clock", "device_class": None},
+    "lnpr_total_today": {"name": "Today Recognitions", "unit": "count", "icon": "mdi:counter", "device_class": None},
+    "lnpr_authorized_count": {"name": "Authorized Plates", "unit": "count", "icon": "mdi:format-list-numbered", "device_class": None},
 }
 
 # Бинарные сенсоры
@@ -131,6 +150,10 @@ BINARY_SENSOR_TYPES = {
     "night_light": {"name": "Night Light", "icon": "mdi:lightbulb-night"},
     "audio_enabled": {"name": "Audio", "icon": "mdi:microphone"},
     "speaker_enabled": {"name": "Speaker", "icon": "mdi:speaker"},
+    
+    # LNPR бинарные сенсоры
+    "lnpr_authorized": {"name": "Authorized Plate", "icon": "mdi:check-circle"},
+    "lnpr_unauthorized": {"name": "Unauthorized Plate", "icon": "mdi:alert-circle"},
 }
 
 # Переключатели
@@ -139,6 +162,12 @@ SWITCH_TYPES = {
     "ircut": {"name": "IR Cut", "icon": "mdi:camera-iris"},
     "night_light": {"name": "Night Light", "icon": "mdi:lightbulb-night"},
     "recording": {"name": "Recording", "icon": "mdi:record-rec"},
+    
+    # LNPR переключатели
+    "lnpr_enable": {"name": "LNPR Enable", "icon": "mdi:car"},
+    "lnpr_free_enter": {"name": "Free Enter Mode", "icon": "mdi:gate"},
+    "lnpr_record": {"name": "Record on Recognition", "icon": "mdi:record-rec"},
+    "lnpr_ftp": {"name": "FTP on Recognition", "icon": "mdi:cloud-upload"},
 }
 
 # Discovery constants
@@ -213,13 +242,31 @@ DEFAULT_OSD_BG_COLOR = "black@0.5"
 DEFAULT_OSD_OPACITY = 0.7
 
 # Beward specific endpoints
-BEWARD_SNAPSHOT = "/cgi-bin/image.cgi"
+BEWARD_SNAPSHOT = "/cgi-bin/jpg/image.cgi"
 BEWARD_MJPEG = "/cgi-bin/video.cgi"
 BEWARD_RTSP_MAIN = "/av0_0"
 BEWARD_RTSP_SUB = "/av0_1"
 BEWARD_OPEN_DOOR = "/cgi-bin/intercom_cgi?action=maindoor"
 BEWARD_OPEN_DOOR_ALT = "/cgi-bin/intercom_cgi?action=altdoor"
 BEWARD_STATUS = "/cgi-bin/status.cgi"
+BEWARD_AUDIO_GET = "/cgi-bin/audio_cgi?action=get"
+BEWARD_AUDIO_SET = "/cgi-bin/audio_cgi?action=set"
+BEWARD_INTERCOM_STATUS = "/cgi-bin/intercom_cgi?action=status"
+BEWARD_INTERCOM_LOCKED = "/cgi-bin/intercom_cgi?action=locked"
+BEWARD_SYSTEM_INFO = "/cgi-bin/systeminfo_cgi?action=get"
+BEWARD_PLAY_SOUND = "/cgi-bin/intercom_info_cgi?action=play_sound&Type=0"
+BEWARD_AUDIO_BEEP = "/cgi-bin/audio_cgi?action=beep"
+
+# Beward LNPR endpoints
+BEWARD_LNPR_STATE = "/cgi-bin/lnprstate_cgi"
+BEWARD_LNPR_LIST = "/cgi-bin/lnpr_cgi?action=list"
+BEWARD_LNPR_ADD = "/cgi-bin/lnpr_cgi?action=add"
+BEWARD_LNPR_EDIT = "/cgi-bin/lnpr_cgi?action=edit"
+BEWARD_LNPR_DELETE = "/cgi-bin/lnpr_cgi?action=remove"
+BEWARD_LNPR_CLEAR = "/cgi-bin/lnpr_cgi?action=clear"
+BEWARD_LNPR_EXPORT = "/cgi-bin/lnprevent_cgi?action=export"
+BEWARD_LNPR_GET_PIC = "/cgi-bin/lnprevent_cgi?action=getpic"
+BEWARD_LNPR_CURRENT = "/cgi-bin/lnprevent_cgi?action=current"
 
 # Vivotek specific endpoints
 VIVOTEK_SNAPSHOT = "/cgi-bin/video.jpg"
@@ -232,3 +279,13 @@ BEWARD_EVENT_MOTION = "motion"
 BEWARD_EVENT_SENSOR = "sensor"
 BEWARD_EVENT_SOUND = "sound"
 BEWARD_EVENT_ONLINE = "online"
+BEWARD_EVENT_DOOR_MAIN = "main_door"
+BEWARD_EVENT_DOOR_ALT = "alt_door"
+BEWARD_EVENT_BUTTON_MAIN = "main_button"
+BEWARD_EVENT_BUTTON_ALT = "alt_button"
+BEWARD_EVENT_BREAK_IN = "break_in"
+
+# LNPR Events
+LNPR_EVENT_RECOGNIZED = "lnpr_recognized"
+LNPR_EVENT_AUTHORIZED = "lnpr_authorized"
+LNPR_EVENT_UNAUTHORIZED = "lnpr_unauthorized"

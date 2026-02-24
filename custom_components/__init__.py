@@ -47,6 +47,17 @@ from .const import (
     DEVICE_TYPE_OPENIPC,
     DEVICE_TYPE_BEWARD,
     DEVICE_TYPE_VIVOTEK,
+    # LNPR endpoints
+    LNPR_STATE,
+    LNPR_LIST,
+    LNPR_ADD,
+    LNPR_EDIT,
+    LNPR_DELETE,
+    LNPR_CLEAR,
+    LNPR_EXPORT,
+    LNPR_CLEAR_LOG,
+    LNPR_CURRENT,
+    LNPR_GET_PIC,
 )
 
 from .recorder import OpenIPCRecorder
@@ -55,19 +66,21 @@ from .recorder import OpenIPCRecorder
 try:
     from .beward_device import OpenIPCBewardDevice
     BEWARD_AVAILABLE = True
-except ImportError:
+except ImportError as err:
     BEWARD_AVAILABLE = False
     OpenIPCBewardDevice = None
     _LOGGER = logging.getLogger(__name__)
-    _LOGGER.warning("Beward client not available. Install: pip install beward==1.1.4")
+    _LOGGER.warning(f"Beward client not available: {err}. Install: pip install beward==1.1.4")
 
 # Попытка импортировать Vivotek клиент (опционально)
 try:
     from .vivotek_device import OpenIPCVivotekDevice
     VIVOTEK_AVAILABLE = True
-except ImportError:
+except ImportError as err:
     VIVOTEK_AVAILABLE = False
     OpenIPCVivotekDevice = None
+    _LOGGER = logging.getLogger(__name__)
+    _LOGGER.warning(f"Vivotek client not available: {err}")
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -183,10 +196,65 @@ RECORD_WITH_OSD_SCHEMA = vol.Schema({
     vol.Optional("send_telegram", default=False): cv.boolean,
 })
 
+# LNPR service schemas
+LNPR_GET_LIST_SCHEMA = vol.Schema({
+    vol.Required(CONF_ENTITY_ID): cv.entity_id,
+})
+
+LNPR_ADD_PLATE_SCHEMA = vol.Schema({
+    vol.Required(CONF_ENTITY_ID): cv.entity_id,
+    vol.Required("number"): cv.string,
+    vol.Optional("begin"): cv.string,
+    vol.Optional("end"): cv.string,
+    vol.Optional("notify", default=False): cv.boolean,
+    vol.Optional("note"): cv.string,
+})
+
+LNPR_DELETE_PLATE_SCHEMA = vol.Schema({
+    vol.Required(CONF_ENTITY_ID): cv.entity_id,
+    vol.Required("number"): cv.string,
+})
+
+LNPR_EXPORT_EVENTS_SCHEMA = vol.Schema({
+    vol.Required(CONF_ENTITY_ID): cv.entity_id,
+    vol.Optional("days", default=7): vol.Coerce(int),
+})
+
+LNPR_CLEAR_EVENTS_SCHEMA = vol.Schema({
+    vol.Required(CONF_ENTITY_ID): cv.entity_id,
+})
+
+LNPR_CLEAR_LIST_SCHEMA = vol.Schema({
+    vol.Required(CONF_ENTITY_ID): cv.entity_id,
+})
+
+LNPR_GET_PICTURE_SCHEMA = vol.Schema({
+    vol.Required(CONF_ENTITY_ID): cv.entity_id,
+    vol.Required("time"): cv.string,
+    vol.Required("filename"): cv.string,
+})
+
 # Beward specific service schemas
 BEWARD_OPEN_DOOR_SCHEMA = vol.Schema({
     vol.Required(CONF_ENTITY_ID): cv.entity_id,
     vol.Optional("main", default=True): cv.boolean,
+})
+
+BEWARD_PLAY_BEEP_SCHEMA = vol.Schema({
+    vol.Required(CONF_ENTITY_ID): cv.entity_id,
+})
+
+BEWARD_PLAY_RINGTONE_SCHEMA = vol.Schema({
+    vol.Required(CONF_ENTITY_ID): cv.entity_id,
+})
+
+BEWARD_ENABLE_AUDIO_SCHEMA = vol.Schema({
+    vol.Required(CONF_ENTITY_ID): cv.entity_id,
+    vol.Required("enable"): cv.boolean,
+})
+
+BEWARD_TEST_SCHEMA = vol.Schema({
+    vol.Required(CONF_ENTITY_ID): cv.entity_id,
 })
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -231,10 +299,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 password=entry.data[CONF_PASSWORD],
                 camera_name=entry.data.get(CONF_NAME, "Beward")
             )
+            # Запускаем подключение
             hass.async_create_task(coordinator.beward.async_connect())
             _LOGGER.info(f"✅ Beward device initialized for {entry.data.get(CONF_NAME)} (DS07P-LP)")
+            
+            # Принудительно обновляем данные после подключения
+            hass.loop.call_later(5, lambda: hass.async_create_task(coordinator.async_request_refresh()))
+            
         except Exception as err:
-            _LOGGER.error(f"❌ Beward init failed: {err}")
+            _LOGGER.error(f"❌ Beward init failed: {err}", exc_info=True)
             coordinator.beward = None
             
     elif device_type == DEVICE_TYPE_VIVOTEK and OpenIPCVivotekDevice:
@@ -737,6 +810,306 @@ async def async_register_services(hass: HomeAssistant) -> None:
         else:
             _LOGGER.error("Coordinator not found for entity %s", entity_id)
 
+    # LNPR Services
+    async def async_lnpr_get_list(call: ServiceCall) -> None:
+        """Handle LNPR get list service."""
+        entity_id = None
+        if hasattr(call, 'target') and call.target:
+            entity_id = call.target.get("entity_id")
+        if not entity_id:
+            entity_id = call.data.get(CONF_ENTITY_ID)
+        
+        coordinator = await async_find_coordinator_by_entity_id(entity_id)
+        if not coordinator or not coordinator.beward:
+            _LOGGER.error("Beward device not found for entity %s", entity_id)
+            return
+        
+        try:
+            url = f"http://{coordinator.host}:{coordinator.port}{LNPR_LIST}"
+            async with coordinator.session.get(url, auth=coordinator.auth, timeout=10) as response:
+                if response.status == 200:
+                    text = await response.text()
+                    
+                    # Парсим список номеров
+                    plates = []
+                    lines = text.strip().split('\n')
+                    for line in lines:
+                        if line.startswith('Number'):
+                            plates.append(line)
+                    
+                    message = f"📋 **Список разрешенных номеров:**\n\n"
+                    if plates:
+                        for i, plate in enumerate(plates, 1):
+                            message += f"{i}. {plate}\n"
+                        message += f"\nВсего: {len(plates)} номеров"
+                    else:
+                        message += "Список пуст"
+                    
+                    await hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": f"LNPR Whitelist - {coordinator.recorder.camera_name}",
+                            "message": message,
+                            "notification_id": f"openipc_lnpr_list_{coordinator.entry.entry_id}"
+                        },
+                        blocking=True
+                    )
+                else:
+                    _LOGGER.error("Failed to get LNPR list: HTTP %d", response.status)
+        except Exception as err:
+            _LOGGER.error("Error getting LNPR list: %s", err)
+
+    async def async_lnpr_add_plate(call: ServiceCall) -> None:
+        """Handle LNPR add plate service."""
+        entity_id = None
+        if hasattr(call, 'target') and call.target:
+            entity_id = call.target.get("entity_id")
+        if not entity_id:
+            entity_id = call.data.get(CONF_ENTITY_ID)
+        
+        number = call.data.get("number")
+        begin = call.data.get("begin", "")
+        end = call.data.get("end", "")
+        notify = "on" if call.data.get("notify", False) else "off"
+        note = call.data.get("note", "")
+        
+        coordinator = await async_find_coordinator_by_entity_id(entity_id)
+        if not coordinator or not coordinator.beward:
+            _LOGGER.error("Beward device not found for entity %s", entity_id)
+            return
+        
+        try:
+            # Формируем URL
+            url = f"http://{coordinator.host}:{coordinator.port}{LNPR_ADD}"
+            params = f"&Number={number}"
+            if begin:
+                params += f"&Begin={begin}"
+            if end:
+                params += f"&End={end}"
+            if notify:
+                params += f"&Notify={notify}"
+            if note:
+                params += f"&Note={note}"
+            
+            full_url = url + params
+            async with coordinator.session.get(full_url, auth=coordinator.auth, timeout=10) as response:
+                if response.status == 200:
+                    await hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": f"✅ Номер добавлен - {coordinator.recorder.camera_name}",
+                            "message": f"Номер {number} успешно добавлен в белый список",
+                            "notification_id": f"openipc_lnpr_add_{coordinator.entry.entry_id}"
+                        },
+                        blocking=True
+                    )
+                    # Обновляем данные
+                    await coordinator.async_request_refresh()
+                else:
+                    _LOGGER.error("Failed to add LNPR plate: HTTP %d", response.status)
+        except Exception as err:
+            _LOGGER.error("Error adding LNPR plate: %s", err)
+
+    async def async_lnpr_delete_plate(call: ServiceCall) -> None:
+        """Handle LNPR delete plate service."""
+        entity_id = None
+        if hasattr(call, 'target') and call.target:
+            entity_id = call.target.get("entity_id")
+        if not entity_id:
+            entity_id = call.data.get(CONF_ENTITY_ID)
+        
+        number = call.data.get("number")
+        
+        coordinator = await async_find_coordinator_by_entity_id(entity_id)
+        if not coordinator or not coordinator.beward:
+            _LOGGER.error("Beward device not found for entity %s", entity_id)
+            return
+        
+        try:
+            url = f"http://{coordinator.host}:{coordinator.port}{LNPR_DELETE}&Number={number}"
+            async with coordinator.session.get(url, auth=coordinator.auth, timeout=10) as response:
+                if response.status == 200:
+                    await hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": f"✅ Номер удален - {coordinator.recorder.camera_name}",
+                            "message": f"Номер {number} успешно удален из белого списка",
+                            "notification_id": f"openipc_lnpr_delete_{coordinator.entry.entry_id}"
+                        },
+                        blocking=True
+                    )
+                    # Обновляем данные
+                    await coordinator.async_request_refresh()
+                else:
+                    _LOGGER.error("Failed to delete LNPR plate: HTTP %d", response.status)
+        except Exception as err:
+            _LOGGER.error("Error deleting LNPR plate: %s", err)
+
+    async def async_lnpr_export_events(call: ServiceCall) -> None:
+        """Handle LNPR export events service."""
+        entity_id = None
+        if hasattr(call, 'target') and call.target:
+            entity_id = call.target.get("entity_id")
+        if not entity_id:
+            entity_id = call.data.get(CONF_ENTITY_ID)
+        
+        days = call.data.get("days", 7)
+        
+        coordinator = await async_find_coordinator_by_entity_id(entity_id)
+        if not coordinator or not coordinator.beward:
+            _LOGGER.error("Beward device not found for entity %s", entity_id)
+            return
+        
+        from datetime import datetime, timedelta
+        
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+        
+        start_str = start_date.strftime("%Y-%m-%d %%20%H:%%20%M:%%20%S")
+        end_str = end_date.strftime("%Y-%m-%d %%20%H:%%20%M:%%20%S")
+        
+        try:
+            url = f"http://{coordinator.host}:{coordinator.port}{LNPR_EXPORT}&begin={start_str}&end={end_str}"
+            async with coordinator.session.get(url, auth=coordinator.auth, timeout=30) as response:
+                if response.status == 200:
+                    text = await response.text()
+                    
+                    # Сохраняем в файл
+                    filename = f"/config/lnpr_events_{coordinator.entry.entry_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                    with open(filename, 'w') as f:
+                        f.write(text)
+                    
+                    await hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": f"📊 LNPR Events - {coordinator.recorder.camera_name}",
+                            "message": f"✅ Экспорт завершен\n\n"
+                                      f"📁 Файл: {filename}\n"
+                                      f"📅 Период: {start_date.strftime('%Y-%m-%d')} - {end_date.strftime('%Y-%m-%d')}\n"
+                                      f"Размер: {len(text)} байт",
+                            "notification_id": f"openipc_lnpr_export_{coordinator.entry.entry_id}"
+                        },
+                        blocking=True
+                    )
+                else:
+                    _LOGGER.error("Failed to export LNPR events: HTTP %d", response.status)
+        except Exception as err:
+            _LOGGER.error("Error exporting LNPR events: %s", err)
+
+    async def async_lnpr_clear_events(call: ServiceCall) -> None:
+        """Handle LNPR clear events service."""
+        entity_id = None
+        if hasattr(call, 'target') and call.target:
+            entity_id = call.target.get("entity_id")
+        if not entity_id:
+            entity_id = call.data.get(CONF_ENTITY_ID)
+        
+        coordinator = await async_find_coordinator_by_entity_id(entity_id)
+        if not coordinator or not coordinator.beward:
+            _LOGGER.error("Beward device not found for entity %s", entity_id)
+            return
+        
+        try:
+            url = f"http://{coordinator.host}:{coordinator.port}{LNPR_CLEAR_LOG}"
+            async with coordinator.session.get(url, auth=coordinator.auth, timeout=10) as response:
+                if response.status == 200:
+                    await hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": f"✅ LNPR Events Cleared - {coordinator.recorder.camera_name}",
+                            "message": "Журнал событий LNPR успешно очищен",
+                            "notification_id": f"openipc_lnpr_clear_events_{coordinator.entry.entry_id}"
+                        },
+                        blocking=True
+                    )
+                else:
+                    _LOGGER.error("Failed to clear LNPR events: HTTP %d", response.status)
+        except Exception as err:
+            _LOGGER.error("Error clearing LNPR events: %s", err)
+
+    async def async_lnpr_clear_list(call: ServiceCall) -> None:
+        """Handle LNPR clear list service."""
+        entity_id = None
+        if hasattr(call, 'target') and call.target:
+            entity_id = call.target.get("entity_id")
+        if not entity_id:
+            entity_id = call.data.get(CONF_ENTITY_ID)
+        
+        coordinator = await async_find_coordinator_by_entity_id(entity_id)
+        if not coordinator or not coordinator.beward:
+            _LOGGER.error("Beward device not found for entity %s", entity_id)
+            return
+        
+        try:
+            url = f"http://{coordinator.host}:{coordinator.port}{LNPR_CLEAR}"
+            async with coordinator.session.get(url, auth=coordinator.auth, timeout=10) as response:
+                if response.status == 200:
+                    await hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": f"✅ LNPR List Cleared - {coordinator.recorder.camera_name}",
+                            "message": "Список разрешенных номеров успешно очищен",
+                            "notification_id": f"openipc_lnpr_clear_list_{coordinator.entry.entry_id}"
+                        },
+                        blocking=True
+                    )
+                    # Обновляем данные
+                    await coordinator.async_request_refresh()
+                else:
+                    _LOGGER.error("Failed to clear LNPR list: HTTP %d", response.status)
+        except Exception as err:
+            _LOGGER.error("Error clearing LNPR list: %s", err)
+
+    async def async_lnpr_get_picture(call: ServiceCall) -> None:
+        """Handle LNPR get picture service."""
+        entity_id = None
+        if hasattr(call, 'target') and call.target:
+            entity_id = call.target.get("entity_id")
+        if not entity_id:
+            entity_id = call.data.get(CONF_ENTITY_ID)
+        
+        time_str = call.data.get("time")
+        filename = call.data.get("filename")
+        
+        coordinator = await async_find_coordinator_by_entity_id(entity_id)
+        if not coordinator or not coordinator.beward:
+            _LOGGER.error("Beward device not found for entity %s", entity_id)
+            return
+        
+        try:
+            # Кодируем время для URL
+            encoded_time = time_str.replace(' ', '%20')
+            url = f"http://{coordinator.host}:{coordinator.port}{LNPR_GET_PIC}&time={encoded_time}"
+            
+            async with coordinator.session.get(url, auth=coordinator.auth, timeout=30) as response:
+                if response.status == 200:
+                    data = await response.read()
+                    
+                    # Сохраняем картинку
+                    with open(filename, 'wb') as f:
+                        f.write(data)
+                    
+                    await hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": f"✅ LNPR Picture Saved - {coordinator.recorder.camera_name}",
+                            "message": f"Изображение сохранено:\n{filename}\n\nРазмер: {len(data)} байт",
+                            "notification_id": f"openipc_lnpr_picture_{coordinator.entry.entry_id}"
+                        },
+                        blocking=True
+                    )
+                else:
+                    _LOGGER.error("Failed to get LNPR picture: HTTP %d", response.status)
+        except Exception as err:
+            _LOGGER.error("Error getting LNPR picture: %s", err)
+
     # Beward specific services
     async def async_beward_open_door(call: ServiceCall) -> None:
         """Handle Beward open door service."""
@@ -752,6 +1125,83 @@ async def async_register_services(hass: HomeAssistant) -> None:
         if coordinator and hasattr(coordinator, 'beward') and coordinator.beward:
             await coordinator.beward.async_open_door(main)
             _LOGGER.debug("Beward open door on %s", entity_id)
+        else:
+            _LOGGER.error("Beward device not available for entity %s", entity_id)
+
+    async def async_beward_play_beep(call: ServiceCall) -> None:
+        """Handle Beward play beep service."""
+        entity_id = None
+        if hasattr(call, 'target') and call.target:
+            entity_id = call.target.get("entity_id")
+        if not entity_id:
+            entity_id = call.data.get(CONF_ENTITY_ID)
+        
+        coordinator = await async_find_coordinator_by_entity_id(entity_id)
+        if coordinator and hasattr(coordinator, 'beward') and coordinator.beward:
+            await coordinator.beward.async_play_beep()
+            _LOGGER.debug("Beward play beep on %s", entity_id)
+        else:
+            _LOGGER.error("Beward device not available for entity %s", entity_id)
+
+    async def async_beward_play_ringtone(call: ServiceCall) -> None:
+        """Handle Beward play ringtone service."""
+        entity_id = None
+        if hasattr(call, 'target') and call.target:
+            entity_id = call.target.get("entity_id")
+        if not entity_id:
+            entity_id = call.data.get(CONF_ENTITY_ID)
+        
+        coordinator = await async_find_coordinator_by_entity_id(entity_id)
+        if coordinator and hasattr(coordinator, 'beward') and coordinator.beward:
+            await coordinator.beward.async_play_ringtone()
+            _LOGGER.debug("Beward play ringtone on %s", entity_id)
+        else:
+            _LOGGER.error("Beward device not available for entity %s", entity_id)
+
+    async def async_beward_enable_audio(call: ServiceCall) -> None:
+        """Handle Beward enable audio service."""
+        entity_id = None
+        if hasattr(call, 'target') and call.target:
+            entity_id = call.target.get("entity_id")
+        if not entity_id:
+            entity_id = call.data.get(CONF_ENTITY_ID)
+        
+        enable = call.data.get("enable", True)
+        
+        coordinator = await async_find_coordinator_by_entity_id(entity_id)
+        if coordinator and hasattr(coordinator, 'beward') and coordinator.beward:
+            await coordinator.beward.async_enable_audio(enable)
+            _LOGGER.debug("Beward enable audio %s on %s", enable, entity_id)
+        else:
+            _LOGGER.error("Beward device not available for entity %s", entity_id)
+
+    async def async_beward_test(call: ServiceCall) -> None:
+        """Handle Beward test service."""
+        entity_id = None
+        if hasattr(call, 'target') and call.target:
+            entity_id = call.target.get("entity_id")
+        if not entity_id:
+            entity_id = call.data.get(CONF_ENTITY_ID)
+        
+        coordinator = await async_find_coordinator_by_entity_id(entity_id)
+        if coordinator and hasattr(coordinator, 'beward') and coordinator.beward:
+            results = await coordinator.beward.async_test_alarm()
+            
+            # Показываем результаты в уведомлении
+            message = "📊 **Beward Test Results**\n\n"
+            for test, result in results.items():
+                status = result.get("status", "ERROR")
+                status_icon = "✅" if status == 200 else "❌"
+                message += f"{status_icon} **{test}**: HTTP {status}\n"
+                if "response" in result:
+                    message += f"   Response: `{result['response'][:100]}`\n"
+                message += "\n"
+            
+            hass.components.persistent_notification.async_create(
+                message,
+                title="Beward Device Test",
+                notification_id="beward_test"
+            )
         else:
             _LOGGER.error("Beward device not available for entity %s", entity_id)
 
@@ -932,6 +1382,63 @@ async def async_register_services(hass: HomeAssistant) -> None:
             schema=RECORD_WITH_OSD_SCHEMA
         )
 
+    # Register LNPR services
+    if not hass.services.has_service(DOMAIN, "lnpr_get_list"):
+        hass.services.async_register(
+            DOMAIN,
+            "lnpr_get_list",
+            async_lnpr_get_list,
+            schema=LNPR_GET_LIST_SCHEMA
+        )
+
+    if not hass.services.has_service(DOMAIN, "lnpr_add_plate"):
+        hass.services.async_register(
+            DOMAIN,
+            "lnpr_add_plate",
+            async_lnpr_add_plate,
+            schema=LNPR_ADD_PLATE_SCHEMA
+        )
+
+    if not hass.services.has_service(DOMAIN, "lnpr_delete_plate"):
+        hass.services.async_register(
+            DOMAIN,
+            "lnpr_delete_plate",
+            async_lnpr_delete_plate,
+            schema=LNPR_DELETE_PLATE_SCHEMA
+        )
+
+    if not hass.services.has_service(DOMAIN, "lnpr_export_events"):
+        hass.services.async_register(
+            DOMAIN,
+            "lnpr_export_events",
+            async_lnpr_export_events,
+            schema=LNPR_EXPORT_EVENTS_SCHEMA
+        )
+
+    if not hass.services.has_service(DOMAIN, "lnpr_clear_events"):
+        hass.services.async_register(
+            DOMAIN,
+            "lnpr_clear_events",
+            async_lnpr_clear_events,
+            schema=LNPR_CLEAR_EVENTS_SCHEMA
+        )
+
+    if not hass.services.has_service(DOMAIN, "lnpr_clear_list"):
+        hass.services.async_register(
+            DOMAIN,
+            "lnpr_clear_list",
+            async_lnpr_clear_list,
+            schema=LNPR_CLEAR_LIST_SCHEMA
+        )
+
+    if not hass.services.has_service(DOMAIN, "lnpr_get_picture"):
+        hass.services.async_register(
+            DOMAIN,
+            "lnpr_get_picture",
+            async_lnpr_get_picture,
+            schema=LNPR_GET_PICTURE_SCHEMA
+        )
+
     # Register Beward services
     if not hass.services.has_service(DOMAIN, "beward_open_door"):
         hass.services.async_register(
@@ -940,9 +1447,60 @@ async def async_register_services(hass: HomeAssistant) -> None:
             async_beward_open_door,
             schema=BEWARD_OPEN_DOOR_SCHEMA
         )
+    
+    if not hass.services.has_service(DOMAIN, "beward_play_beep"):
+        hass.services.async_register(
+            DOMAIN,
+            "beward_play_beep",
+            async_beward_play_beep,
+            schema=BEWARD_PLAY_BEEP_SCHEMA
+        )
+    
+    if not hass.services.has_service(DOMAIN, "beward_play_ringtone"):
+        hass.services.async_register(
+            DOMAIN,
+            "beward_play_ringtone",
+            async_beward_play_ringtone,
+            schema=BEWARD_PLAY_RINGTONE_SCHEMA
+        )
+    
+    if not hass.services.has_service(DOMAIN, "beward_enable_audio"):
+        hass.services.async_register(
+            DOMAIN,
+            "beward_enable_audio",
+            async_beward_enable_audio,
+            schema=BEWARD_ENABLE_AUDIO_SCHEMA
+        )
+    
+    if not hass.services.has_service(DOMAIN, "beward_test"):
+        hass.services.async_register(
+            DOMAIN,
+            "beward_test",
+            async_beward_test,
+            schema=BEWARD_TEST_SCHEMA
+        )
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    # Останавливаем poller для Beward с таймаутом
+    coordinator = hass.data[DOMAIN].get(entry.entry_id)
+    if coordinator and hasattr(coordinator, 'beward') and coordinator.beward:
+        _LOGGER.info(f"🔧 Stopping Beward poller for {entry.data.get('name')}")
+        try:
+            # Останавливаем poller принудительно
+            coordinator.beward._stop_poller = True
+            coordinator.beward._available = False
+            
+            # Отменяем задачу если она есть
+            if hasattr(coordinator.beward, '_poller_task') and coordinator.beward._poller_task:
+                coordinator.beward._poller_task.cancel()
+                try:
+                    await asyncio.wait_for(coordinator.beward._poller_task, timeout=1.0)
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    pass
+        except Exception as err:
+            _LOGGER.warning(f"⚠️ Error stopping poller: {err}")
+    
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
@@ -954,7 +1512,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "delete_recording", "record_and_send_telegram", "diagnose_rtsp", 
             "diagnose_telegram", "test_telegram", "get_recordings_stats",
             "delete_all_recordings", "get_video_thumbnail", "record_with_osd", "list_fonts",
-            "beward_open_door"
+            "beward_open_door", "beward_play_beep", "beward_play_ringtone", 
+            "beward_enable_audio", "beward_test",
+            "lnpr_get_list", "lnpr_add_plate", "lnpr_delete_plate", "lnpr_export_events",
+            "lnpr_clear_events", "lnpr_clear_list", "lnpr_get_picture"
         ]
         for service in services:
             if hass.services.has_service(DOMAIN, service):
@@ -991,6 +1552,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         device_registry.async_clear_config_entry(entry.entry_id)
     except Exception as err:
         _LOGGER.debug("Error removing device registry entry: %s", err)
+
 
 class OpenIPCDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching OpenIPC data."""
@@ -1070,6 +1632,11 @@ class OpenIPCDataUpdateCoordinator(DataUpdateCoordinator):
                     "available": True,
                     "last_update": self.hass.loop.time(),
                 }
+                
+                # Получаем LNPR данные если это Beward
+                if self.beward:
+                    lnpr_data = await self._async_update_lnpr()
+                    data["lnpr"] = lnpr_data
                 
                 return data
                 
@@ -1229,6 +1796,71 @@ class OpenIPCDataUpdateCoordinator(DataUpdateCoordinator):
                     parsed["firmware"] = fw_match.group(1).strip()
         
         return parsed
+
+    async def _async_update_lnpr(self):
+        """Fetch LNPR data from camera."""
+        if not self.beward:  # Только для Beward
+            return {}
+        
+        lnpr_data = {
+            "last_number": "none",
+            "last_direction": "unknown",
+            "last_time": "none",
+            "last_coordinates": "",
+            "last_size": "",
+            "last_authorized": False,
+            "total_today": 0,
+            "authorized_count": 0,
+            "enabled": True,
+        }
+        
+        try:
+            # Получаем текущее состояние распознавания
+            url = f"http://{self.host}:{self.port}{LNPR_STATE}"
+            async with async_timeout.timeout(5):
+                async with self.session.get(url, auth=self.auth) as response:
+                    if response.status == 200:
+                        text = await response.text()
+                        lines = text.strip().split('\n')
+                        for line in lines:
+                            if line and not line.startswith('--'):
+                                # Парсим строку: "2018-04-03 00:00:00 Y200HP24 28,10 160,300 away"
+                                parts = line.split()
+                                if len(parts) >= 5:
+                                    date_time = f"{parts[0]} {parts[1]}"
+                                    number = parts[2]
+                                    coords = parts[3]
+                                    size = parts[4]
+                                    direction = parts[5] if len(parts) > 5 else "unknown"
+                                    
+                                    lnpr_data["last_number"] = number
+                                    lnpr_data["last_direction"] = direction
+                                    lnpr_data["last_time"] = date_time
+                                    lnpr_data["last_coordinates"] = coords
+                                    lnpr_data["last_size"] = size
+                                    
+                                    # Проверяем, есть ли номер в белом списке
+                                    lnpr_data["last_authorized"] = await self._check_plate_authorized(number)
+        
+        except asyncio.TimeoutError:
+            _LOGGER.debug("Timeout fetching LNPR data")
+        except Exception as err:
+            _LOGGER.debug("Error fetching LNPR data: %s", err)
+        
+        return lnpr_data
+
+    async def _check_plate_authorized(self, plate: str) -> bool:
+        """Check if plate is in whitelist."""
+        try:
+            url = f"http://{self.host}:{self.port}{LNPR_LIST}"
+            async with self.session.get(url, auth=self.auth, timeout=5) as response:
+                if response.status == 200:
+                    text = await response.text()
+                    # Простая проверка - ищем номер в списке
+                    return plate in text
+        except:
+            pass
+        return False
 
     async def _get_json_config(self):
         """Get JSON configuration from camera."""

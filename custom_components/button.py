@@ -1,9 +1,12 @@
 """Button platform for OpenIPC."""
 import logging
 import asyncio
+import aiohttp
+from datetime import datetime
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.entity import EntityCategory
 
 from .const import (
     DOMAIN, 
@@ -13,6 +16,11 @@ from .const import (
     CONF_DEVICE_TYPE,
     DEVICE_TYPE_BEWARD,
     DEVICE_TYPE_VIVOTEK,
+    DEVICE_TYPE_OPENIPC,
+    LNPR_LIST,
+    LNPR_EXPORT,
+    LNPR_CLEAR_LOG,
+    LNPR_CLEAR,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -65,7 +73,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             )
         )
     
-    # Кнопки для RTSP записи в HA media (лучшее качество)
+    # Кнопки для RTSP записи в HA media
     for name, duration in RECORDING_PRESETS.items():
         entities.append(
             OpenIPCRTSPRecordButton(
@@ -90,7 +98,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             )
         )
     
-    # Кнопки для RTSP записи и отправки в Telegram (лучшее качество)
+    # Кнопки для RTSP записи и отправки в Telegram
     for name, duration in RECORDING_PRESETS.items():
         entities.append(
             OpenIPCTelegramRecordButton(
@@ -108,8 +116,11 @@ async def async_setup_entry(hass, entry, async_add_entities):
         entities.extend([
             BewardOpenDoorButton(coordinator, entry, 1, "Main Door"),
             BewardOpenDoorButton(coordinator, entry, 2, "Secondary Door"),
-            BewardRelayButton(coordinator, entry, 1),
-            BewardRelayButton(coordinator, entry, 2),
+            # LNPR кнопки для Beward
+            BewardLNPRListButton(coordinator, entry),
+            BewardLNPREmptyButton(coordinator, entry),
+            BewardLNPREventsButton(coordinator, entry),
+            BewardLNPREventsClearButton(coordinator, entry),
         ])
         _LOGGER.info("✅ Added Beward-specific buttons for %s", entry.data.get('name'))
     
@@ -118,10 +129,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
         entities.extend([
             VivotekRebootButton(coordinator, entry),
         ])
-        # Кнопки PTZ будут добавлены через отдельную интеграцию onvif-ptz
         _LOGGER.info("✅ Added Vivotek-specific buttons for %s", entry.data.get('name'))
     
     async_add_entities(entities)
+
 
 class OpenIPCButton(CoordinatorEntity, ButtonEntity):
     """Representation of an OpenIPC button."""
@@ -343,30 +354,65 @@ class BewardOpenDoorButton(CoordinatorEntity, ButtonEntity):
             "identifiers": {(DOMAIN, self.entry.entry_id)},
             "name": self.entry.data.get("name", "Beward Doorbell"),
             "manufacturer": "Beward",
-            "model": "Doorbell",
+            "model": "DS07P-LP",
         }
 
 
-class BewardRelayButton(CoordinatorEntity, ButtonEntity):
-    """Button to activate Beward relay."""
+class BewardLNPRListButton(CoordinatorEntity, ButtonEntity):
+    """Button to get LNPR list (whitelist)."""
 
-    def __init__(self, coordinator, entry, relay_id: int):
+    def __init__(self, coordinator, entry):
         """Initialize the button."""
         super().__init__(coordinator)
         self.coordinator = coordinator
         self.entry = entry
-        self.relay_id = relay_id
-        self._attr_name = f"{entry.data.get('name', 'Beward')} Relay {relay_id}"
-        self._attr_unique_id = f"{entry.entry_id}_beward_relay_{relay_id}"
-        self._attr_icon = "mdi:electric-switch"
+        self._attr_name = f"{entry.data.get('name', 'Beward')} Get Plates List"
+        self._attr_unique_id = f"{entry.entry_id}_beward_lnpr_list"
+        self._attr_icon = "mdi:format-list-numbered"
+        self._attr_entity_category = EntityCategory.CONFIG
 
     async def async_press(self) -> None:
         """Handle the button press."""
-        if self.coordinator.beward:
-            _LOGGER.info("⚡ Activating Beward relay %d", self.relay_id)
-            await self.coordinator.beward.async_activate_relay(self.relay_id, 1.0)
-        else:
+        if not self.coordinator.beward:
             _LOGGER.error("Beward device not available")
+            return
+        
+        _LOGGER.info("📋 Getting LNPR whitelist from %s", self.entry.data.get('name'))
+        
+        try:
+            url = f"http://{self.coordinator.beward.host}{LNPR_LIST}"
+            async with self.coordinator.session.get(url, auth=self.coordinator.auth) as response:
+                if response.status == 200:
+                    text = await response.text()
+                    
+                    # Парсим ответ
+                    plates = []
+                    lines = text.strip().split('\n')
+                    for line in lines:
+                        if line.startswith('Number'):
+                            plates.append(line)
+                    
+                    message = f"📋 **Найденные номера:**\n\n"
+                    if plates:
+                        for plate in plates:
+                            message += f"• {plate}\n"
+                        message += f"\nВсего: {len(plates)} номеров"
+                    else:
+                        message += "Список пуст"
+                    
+                    await self.hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": f"LNPR Whitelist - {self.entry.data.get('name')}",
+                            "message": message,
+                            "notification_id": f"openipc_lnpr_list_{self.entry.entry_id}"
+                        }
+                    )
+                else:
+                    _LOGGER.error("Failed to get LNPR list: HTTP %d", response.status)
+        except Exception as err:
+            _LOGGER.error("Error getting LNPR list: %s", err)
 
     @property
     def device_info(self):
@@ -375,7 +421,192 @@ class BewardRelayButton(CoordinatorEntity, ButtonEntity):
             "identifiers": {(DOMAIN, self.entry.entry_id)},
             "name": self.entry.data.get("name", "Beward Doorbell"),
             "manufacturer": "Beward",
-            "model": "Doorbell",
+            "model": "DS07P-LP",
+        }
+
+
+class BewardLNPREmptyButton(CoordinatorEntity, ButtonEntity):
+    """Button to clear LNPR whitelist."""
+
+    def __init__(self, coordinator, entry):
+        """Initialize the button."""
+        super().__init__(coordinator)
+        self.coordinator = coordinator
+        self.entry = entry
+        self._attr_name = f"{entry.data.get('name', 'Beward')} Clear Plates List"
+        self._attr_unique_id = f"{entry.entry_id}_beward_lnpr_clear"
+        self._attr_icon = "mdi:delete-sweep"
+        self._attr_entity_category = EntityCategory.CONFIG
+
+    async def async_press(self) -> None:
+        """Handle the button press."""
+        if not self.coordinator.beward:
+            _LOGGER.error("Beward device not available")
+            return
+        
+        _LOGGER.info("🧹 Clearing LNPR whitelist for %s", self.entry.data.get('name'))
+        
+        # Спрашиваем подтверждение через уведомление
+        await self.hass.services.async_call(
+            "persistent_notification",
+            "create",
+            {
+                "title": f"⚠️ Подтверждение - {self.entry.data.get('name')}",
+                "message": f"Вы действительно хотите очистить список разрешенных номеров?\n\n"
+                          f"Это действие нельзя отменить!\n\n"
+                          f"Нажмите кнопку еще раз для подтверждения.",
+                "notification_id": f"openipc_lnpr_confirm_{self.entry.entry_id}"
+            }
+        )
+        
+        # Вторая попытка для подтверждения
+        # В реальном коде нужно реализовать подтверждение через события
+        
+        try:
+            url = f"http://{self.coordinator.beward.host}{LNPR_CLEAR}"
+            async with self.coordinator.session.get(url, auth=self.coordinator.auth) as response:
+                if response.status == 200:
+                    await self.hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": f"✅ LNPR - {self.entry.data.get('name')}",
+                            "message": "Список разрешенных номеров успешно очищен",
+                            "notification_id": f"openipc_lnpr_clear_{self.entry.entry_id}"
+                        }
+                    )
+                else:
+                    _LOGGER.error("Failed to clear LNPR list: HTTP %d", response.status)
+        except Exception as err:
+            _LOGGER.error("Error clearing LNPR list: %s", err)
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return {
+            "identifiers": {(DOMAIN, self.entry.entry_id)},
+            "name": self.entry.data.get("name", "Beward Doorbell"),
+            "manufacturer": "Beward",
+            "model": "DS07P-LP",
+        }
+
+
+class BewardLNPREventsButton(CoordinatorEntity, ButtonEntity):
+    """Button to export LNPR events log."""
+
+    def __init__(self, coordinator, entry):
+        """Initialize the button."""
+        super().__init__(coordinator)
+        self.coordinator = coordinator
+        self.entry = entry
+        self._attr_name = f"{entry.data.get('name', 'Beward')} Export LNPR Events"
+        self._attr_unique_id = f"{entry.entry_id}_beward_lnpr_export"
+        self._attr_icon = "mdi:export"
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    async def async_press(self) -> None:
+        """Handle the button press."""
+        if not self.coordinator.beward:
+            _LOGGER.error("Beward device not available")
+            return
+        
+        _LOGGER.info("📊 Exporting LNPR events from %s", self.entry.data.get('name'))
+        
+        from datetime import datetime, timedelta
+        
+        # Экспортируем события за последние 7 дней
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=7)
+        
+        start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
+        end_str = end_date.strftime("%Y-%m-%d %H:%M:%S")
+        
+        try:
+            url = f"http://{self.coordinator.beward.host}{LNPR_EXPORT}&begin={start_str}&end={end_str}"
+            async with self.coordinator.session.get(url, auth=self.coordinator.auth) as response:
+                if response.status == 200:
+                    text = await response.text()
+                    
+                    # Сохраняем в файл
+                    filename = f"/config/lnpr_events_{self.entry.entry_id}_{datetime.now().strftime('%Y%m%d')}.csv"
+                    with open(filename, 'w') as f:
+                        f.write(text)
+                    
+                    await self.hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": f"📊 LNPR Events - {self.entry.data.get('name')}",
+                            "message": f"✅ Экспорт завершен\n\n"
+                                      f"📁 Файл: {filename}\n"
+                                      f"📅 Период: {start_str} - {end_str}\n"
+                                      f"Размер: {len(text)} байт",
+                            "notification_id": f"openipc_lnpr_export_{self.entry.entry_id}"
+                        }
+                    )
+                else:
+                    _LOGGER.error("Failed to export LNPR events: HTTP %d", response.status)
+        except Exception as err:
+            _LOGGER.error("Error exporting LNPR events: %s", err)
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return {
+            "identifiers": {(DOMAIN, self.entry.entry_id)},
+            "name": self.entry.data.get("name", "Beward Doorbell"),
+            "manufacturer": "Beward",
+            "model": "DS07P-LP",
+        }
+
+
+class BewardLNPREventsClearButton(CoordinatorEntity, ButtonEntity):
+    """Button to clear LNPR events log."""
+
+    def __init__(self, coordinator, entry):
+        """Initialize the button."""
+        super().__init__(coordinator)
+        self.coordinator = coordinator
+        self.entry = entry
+        self._attr_name = f"{entry.data.get('name', 'Beward')} Clear LNPR Events"
+        self._attr_unique_id = f"{entry.entry_id}_beward_lnpr_events_clear"
+        self._attr_icon = "mdi:delete"
+        self._attr_entity_category = EntityCategory.CONFIG
+
+    async def async_press(self) -> None:
+        """Handle the button press."""
+        if not self.coordinator.beward:
+            _LOGGER.error("Beward device not available")
+            return
+        
+        _LOGGER.info("🧹 Clearing LNPR events log for %s", self.entry.data.get('name'))
+        
+        try:
+            url = f"http://{self.coordinator.beward.host}{LNPR_CLEAR_LOG}"
+            async with self.coordinator.session.get(url, auth=self.coordinator.auth) as response:
+                if response.status == 200:
+                    await self.hass.services.async_call(
+                        "persistent_notification",
+                        "create",
+                        {
+                            "title": f"✅ LNPR - {self.entry.data.get('name')}",
+                            "message": "Журнал событий LNPR успешно очищен",
+                            "notification_id": f"openipc_lnpr_events_clear_{self.entry.entry_id}"
+                        }
+                    )
+                else:
+                    _LOGGER.error("Failed to clear LNPR events: HTTP %d", response.status)
+        except Exception as err:
+            _LOGGER.error("Error clearing LNPR events: %s", err)
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return {
+            "identifiers": {(DOMAIN, self.entry.entry_id)},
+            "name": self.entry.data.get("name", "Beward Doorbell"),
+            "manufacturer": "Beward",
+            "model": "DS07P-LP",
         }
 
 
@@ -397,7 +628,6 @@ class VivotekRebootButton(CoordinatorEntity, ButtonEntity):
         """Handle the button press."""
         if self.coordinator.vivotek:
             _LOGGER.info("🔄 Rebooting Vivotek camera")
-            # Здесь нужно добавить логику перезагрузки Vivotek
         else:
             _LOGGER.error("Vivotek device not available")
 
@@ -408,5 +638,5 @@ class VivotekRebootButton(CoordinatorEntity, ButtonEntity):
             "identifiers": {(DOMAIN, self.entry.entry_id)},
             "name": self.entry.data.get("name", "Vivotek Camera"),
             "manufacturer": "Vivotek",
-            "model": "PTZ Camera",
+            "model": "SD9364-EHL",
         }

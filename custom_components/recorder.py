@@ -37,6 +37,9 @@ class OpenIPCRecorder:
         self.session = async_get_clientsession(hass)
         self.auth = aiohttp.BasicAuth(username, password)
         
+        # Ссылка на Beward device (будет установлена из координатора)
+        self.beward_device = None
+        
         # Базовая папка media в Home Assistant
         self.media_base = Path(hass.config.path("media"))
         # Создаем папку для конкретной камеры
@@ -54,8 +57,6 @@ class OpenIPCRecorder:
         # Определяем тип камеры
         self.is_beward = False
         self.is_vivotek = False
-        self.beward_device = None
-        self.vivotek_device = None
         
         # Проверяем тип камеры
         if hass.data.get(DOMAIN):
@@ -68,7 +69,6 @@ class OpenIPCRecorder:
                         break
                     if hasattr(coordinator, 'vivotek') and coordinator.vivotek and coordinator.vivotek.host == host:
                         self.is_vivotek = True
-                        self.vivotek_device = coordinator.vivotek
                         _LOGGER.info(f"✅ Camera {camera_name} identified as Vivotek SD9364-EHL at {host}")
                         break
                 else:
@@ -406,29 +406,30 @@ class OpenIPCRecorder:
 
     async def _capture_snapshot(self, snapshot_path: Path):
         """Capture a single snapshot from camera."""
-        # Для Beward используем специальный метод
-        if self.is_beward and self.beward_device:
-            _LOGGER.debug("Camera is Beward, using Beward snapshot method")
-            snapshot = await self.beward_device.async_get_snapshot()
-            if snapshot:
-                async with aiofiles.open(snapshot_path, 'wb') as f:
-                    await f.write(snapshot)
-                _LOGGER.info(f"✅ Snapshot saved via Beward method: {snapshot_path.name}")
-                return True
-            else:
-                _LOGGER.warning("Beward snapshot method failed, falling back to HTTP")
-        
-        # Для Vivotek используем специальный метод
-        if self.is_vivotek and self.vivotek_device:
-            _LOGGER.debug("Camera is Vivotek, using Vivotek snapshot method")
-            snapshot = await self.vivotek_device.async_get_snapshot()
-            if snapshot:
-                async with aiofiles.open(snapshot_path, 'wb') as f:
-                    await f.write(snapshot)
-                _LOGGER.info(f"✅ Snapshot saved via Vivotek method: {snapshot_path.name}")
-                return True
-            else:
-                _LOGGER.warning("Vivotek snapshot method failed, falling back to HTTP")
+        # Для Beward используем правильный эндпоинт
+        if self.is_beward:
+            # Правильный эндпоинт для Beward DS07P-LP
+            url = f"http://{self.host}:{self.port}/cgi-bin/jpg/image.cgi"
+            try:
+                _LOGGER.debug(f"Trying Beward snapshot URL: {url}")
+                async with self.session.get(url, auth=self.auth, timeout=10) as response:
+                    if response.status == 200:
+                        content_type = response.headers.get('Content-Type', '')
+                        if 'image' in content_type:
+                            data = await response.read()
+                            if len(data) > 1000:
+                                async with aiofiles.open(snapshot_path, 'wb') as f:
+                                    await f.write(data)
+                                _LOGGER.info(f"✅ Snapshot saved: {snapshot_path.name} ({len(data)} bytes)")
+                                return True
+                            else:
+                                _LOGGER.warning(f"Snapshot too small ({len(data)} bytes) from {url}")
+                        else:
+                            _LOGGER.warning(f"Unexpected content type from {url}: {content_type}")
+                    else:
+                        _LOGGER.debug(f"URL {url} returned HTTP {response.status}")
+            except Exception as err:
+                _LOGGER.debug(f"Error with Beward snapshot URL: {err}")
         
         # Пробуем разные возможные URL для снимка
         snapshot_urls = [
@@ -635,16 +636,17 @@ class OpenIPCRecorder:
 
     async def _check_rtsp_available(self, rtsp_url: str) -> bool:
         """Check if RTSP stream is available."""
+        # Пробуем TCP first
         cmd = [
             "ffmpeg",
             "-rtsp_transport", "tcp",
             "-i", rtsp_url,
-            "-t", "2",  # Увеличим время проверки до 2 секунд
+            "-t", "2",
             "-f", "null",
             "-"
         ]
         try:
-            _LOGGER.info(f"🔍 Checking RTSP availability: {rtsp_url}")
+            _LOGGER.info(f"🔍 Checking RTSP availability (TCP): {rtsp_url}")
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -654,22 +656,47 @@ class OpenIPCRecorder:
             success = process.returncode == 0
             
             if success:
-                _LOGGER.info(f"✅ RTSP stream available: {rtsp_url}")
+                _LOGGER.info(f"✅ RTSP stream available (TCP): {rtsp_url}")
+                return True
             else:
-                _LOGGER.error(f"❌ RTSP stream not available: {rtsp_url}")
+                _LOGGER.warning(f"❌ RTSP stream not available via TCP: {rtsp_url}")
                 if stderr:
                     error_text = stderr.decode()[:500]
-                    _LOGGER.error(f"FFmpeg error details: {error_text}")
+                    _LOGGER.warning(f"FFmpeg TCP error: {error_text}")
                     
-                    # Проверим специфичные ошибки
-                    if "401 Unauthorized" in error_text:
-                        _LOGGER.error("Authentication failed - check username/password")
-                    elif "Connection refused" in error_text:
-                        _LOGGER.error("Connection refused - camera might be off or wrong port")
-                    elif "No such file" in error_text:
-                        _LOGGER.error("RTSP path not found - wrong URL path")
+                    # Если TCP не работает, пробуем UDP
+                    _LOGGER.info("Trying UDP transport...")
+                    cmd_udp = [
+                        "ffmpeg",
+                        "-rtsp_transport", "udp",
+                        "-i", rtsp_url,
+                        "-t", "2",
+                        "-f", "null",
+                        "-"
+                    ]
+                    process_udp = await asyncio.create_subprocess_exec(
+                        *cmd_udp,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    stdout_udp, stderr_udp = await process_udp.communicate()
+                    if process_udp.returncode == 0:
+                        _LOGGER.info(f"✅ RTSP stream available (UDP): {rtsp_url}")
+                        return True
+                    else:
+                        _LOGGER.error(f"❌ RTSP stream not available via UDP either")
+                        
+                        # Проверяем специфичные ошибки
+                        if stderr_udp:
+                            error_text_udp = stderr_udp.decode()[:500]
+                            if "401 Unauthorized" in error_text_udp:
+                                _LOGGER.error("Authentication failed - check username/password")
+                            elif "Connection refused" in error_text_udp:
+                                _LOGGER.error("Connection refused - camera might be off or wrong port")
+                            elif "No such file" in error_text_udp:
+                                _LOGGER.error("RTSP path not found - wrong URL path")
             
-            return success
+            return False
         except Exception as err:
             _LOGGER.error(f"RTSP check error: {err}")
             return False
