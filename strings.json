@@ -1,0 +1,71 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to OpenIPC Camera",
+        "description": "Enter the connection details for your OpenIPC camera",
+        "data": {
+          "host": "IP Address",
+          "port": "HTTP Port",
+          "username": "Username",
+          "password": "Password",
+          "name": "Camera Name",
+          "rtsp_port": "RTSP Port",
+          "stream_profile": "Stream Profile"
+        }
+      },
+      "select": {
+        "title": "Select OpenIPC Camera",
+        "description": "Found {count} OpenIPC camera(s). Select one to configure or enter manually.",
+        "data": {
+          "device": "Camera"
+        }
+      },
+      "discovery": {
+        "title": "Discovered OpenIPC Camera",
+        "description": "A new OpenIPC camera was discovered at {host}. Would you like to configure it?"
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to camera. Check IP address and make sure camera is powered on.",
+      "invalid_auth": "Invalid authentication. Check username and password.",
+      "unknown": "Unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "Camera is already configured",
+      "no_host": "No host information provided",
+      "no_location": "No location information in SSDP response",
+      "no_devices_found": "No OpenIPC cameras found on the network"
+    }
+  },
+  "services": {
+    "scan_devices": {
+      "name": "Scan for cameras",
+      "description": "Scan local network for OpenIPC cameras"
+    },
+    "reboot": {
+      "name": "Reboot camera",
+      "description": "Reboot the OpenIPC camera"
+    },
+    "set_ir_mode": {
+      "name": "Set IR mode",
+      "description": "Set infrared filter mode",
+      "fields": {
+        "mode": {
+          "name": "Mode",
+          "description": "IR mode: 0=Day, 1=Night, 2=Auto"
+        }
+      }
+    },
+    "play_audio": {
+      "name": "Play audio",
+      "description": "Play audio on camera speaker",
+      "fields": {
+        "media_id": {
+          "name": "Media ID",
+          "description": "Audio file or command to play"
+        }
+      }
+    }
+  }
+}
