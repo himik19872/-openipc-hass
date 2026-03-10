@@ -1,0 +1,424 @@
+# ==================== Basic Services ====================
+
+reboot:
+  name: Reboot camera
+  description: Reboot the OpenIPC camera
+  target:
+    entity:
+      integration: openipc
+      domain: button
+
+set_ir_mode:
+  name: Set IR mode
+  description: Set infrared filter mode
+  target:
+    entity:
+      integration: openipc
+      domain: switch
+  fields:
+    mode:
+      name: Mode
+      description: "IR mode: 0=Day, 1=Night, 2=Auto"
+      required: true
+      selector:
+        select:
+          options:
+            - label: "Day"
+              value: "0"
+            - label: "Night"
+              value: "1"
+            - label: "Auto"
+              value: "2"
+              
+play_audio:
+  name: Play audio
+  description: Play audio on camera speaker
+  target:
+    entity:
+      integration: openipc
+      domain: media_player
+  fields:
+    media_id:
+      name: Media ID
+      description: Audio file or command to play (e.g., "beep", "notification", "/path/to/file.wav")
+      required: true
+      example: "beep"
+      selector:
+        text:
+
+test_audio:
+  name: Test audio
+  description: Test all audio endpoints and methods
+  target:
+    entity:
+      integration: openipc
+      domain: media_player
+
+scan_devices:
+  name: Scan for cameras
+  description: Scan local network for OpenIPC cameras
+  fields: {}
+
+play_tts:
+  name: Произнести текст
+  description: Преобразовать текст в речь и воспроизвести на камере
+  target:
+    entity:
+      integration: openipc
+      domain: media_player
+  fields:
+    message:
+      name: Сообщение
+      description: Текст для озвучивания
+      required: true
+      example: "Внимание, обнаружено движение"
+      selector:
+        text:
+          multiline: false
+    language:
+      name: Язык
+      description: Язык текста (ru или en)
+      required: false
+      default: "ru"
+      selector:
+        select:
+          options:
+            - label: "Русский"
+              value: "ru"
+            - label: "English"
+              value: "en"
+    volume:
+      name: Громкость
+      description: Громкость воспроизведения (0-100)
+      required: false
+      default: 50
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+
+# ==================== Notify Services ====================
+
+openipc_notify:
+  name: Отправить уведомление на камеру
+  description: Отправить TTS сообщение на динамик камеры
+  fields:
+    message:
+      name: Сообщение
+      description: Текст для озвучивания
+      required: true
+      example: "Внимание, обнаружено движение"
+      selector:
+        text:
+          multiline: false
+    target:
+      name: Целевая камера
+      description: Entity ID медиа плеера камеры
+      required: true
+      selector:
+        entity:
+          domain: media_player
+          integration: openipc
+    data:
+      name: Данные
+      description: Дополнительные параметры (language, volume)
+      required: false
+      selector:
+        object:
+          # language и volume будут в data
+
+# ==================== Recording Services ====================
+
+start_recording:
+  name: Start recording
+  description: Start video recording on camera
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+  fields:
+    duration:
+      name: Duration
+      description: Recording duration in seconds (optional)
+      required: false
+      selector:
+        number:
+          min: 5
+          max: 3600
+          unit_of_measurement: seconds
+    save_to_ha:
+      name: Save to HA Media
+      description: Save recording to Home Assistant media folder
+      required: false
+      default: true
+      selector:
+        boolean:
+    method:
+      name: Recording method
+      description: Recording method (snapshots or rtsp)
+      required: false
+      default: "snapshots"
+      selector:
+        select:
+          options:
+            - label: "Snapshots (compatible)"
+              value: "snapshots"
+            - label: "RTSP (better quality)"
+              value: "rtsp"
+
+stop_recording:
+  name: Stop recording
+  description: Stop video recording on camera
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+
+# ==================== Beward Specific Services ====================
+
+beward_open_door:
+  name: Open door
+  description: Open door on Beward doorbell
+  target:
+    entity:
+      integration: openipc
+      domain: button
+  fields:
+    main:
+      name: Main door
+      description: Open main door (true) or secondary (false)
+      required: false
+      default: true
+      selector:
+        boolean:
+
+beward_play_beep:
+  name: Play beep
+  description: Play a beep sound on Beward doorbell
+  target:
+    entity:
+      integration: openipc
+      domain: media_player
+
+beward_play_ringtone:
+  name: Play ringtone
+  description: Play a ringtone on Beward doorbell
+  target:
+    entity:
+      integration: openipc
+      domain: media_player
+
+beward_enable_audio:
+  name: Enable audio
+  description: Enable or disable audio
+  target:
+    entity:
+      integration: openipc
+      domain: media_player
+  fields:
+    enable:
+      name: Enable
+      description: True to enable, False to disable
+      required: true
+      selector:
+        boolean:
+
+beward_test:
+  name: Test Beward
+  description: Test all Beward device functions
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+
+# ==================== LNPR Services ====================
+
+lnpr_get_list:
+  name: Get LNPR whitelist
+  description: Get list of authorized license plates
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+
+lnpr_add_plate:
+  name: Add license plate
+  description: Add license plate to whitelist
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+  fields:
+    number:
+      name: Plate number
+      description: License plate number
+      required: true
+      example: "A123BC77"
+      selector:
+        text:
+
+lnpr_delete_plate:
+  name: Delete license plate
+  description: Remove license plate from whitelist
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+  fields:
+    number:
+      name: Plate number
+      description: License plate number to delete
+      required: true
+      example: "A123BC77"
+      selector:
+        text:
+
+lnpr_export_events:
+  name: Export LNPR events
+  description: Export license plate recognition events
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+  fields:
+    days:
+      name: Days
+      description: Number of days to export (default 7)
+      required: false
+      default: 7
+      selector:
+        number:
+          min: 1
+          max: 30
+          unit_of_measurement: days
+
+lnpr_clear_events:
+  name: Clear LNPR events
+  description: Clear license plate recognition event log
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+
+lnpr_clear_list:
+  name: Clear LNPR whitelist
+  description: Remove all license plates from whitelist
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+
+lnpr_get_picture:
+  name: Get LNPR picture
+  description: Get picture of recognized license plate
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+  fields:
+    time:
+      name: Event time
+      description: Event time in format "YYYY-MM-DD HH:MM:SS-N"
+      required: true
+      example: "2024-01-15 14:30:25-1"
+      selector:
+        text:
+    filename:
+      name: Filename
+      description: Where to save the picture
+      required: true
+      example: "/config/www/lnpr.jpg"
+      selector:
+        text:
+
+# ==================== PTZ Services ====================
+
+ptz_move:
+  name: PTZ move
+  description: Move PTZ camera in specified direction
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+  fields:
+    direction:
+      name: Direction
+      description: Direction to move
+      required: true
+      selector:
+        select:
+          options:
+            - label: "Up"
+              value: "up"
+            - label: "Down"
+              value: "down"
+            - label: "Left"
+              value: "left"
+            - label: "Right"
+              value: "right"
+            - label: "Up-Left"
+              value: "up-left"
+            - label: "Up-Right"
+              value: "up-right"
+            - label: "Down-Left"
+              value: "down-left"
+            - label: "Down-Right"
+              value: "down-right"
+            - label: "Zoom In"
+              value: "in"
+            - label: "Zoom Out"
+              value: "out"
+    speed:
+      name: Speed
+      description: Movement speed (1-100)
+      required: false
+      default: 50
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+
+ptz_goto_preset:
+  name: PTZ go to preset
+  description: Move PTZ camera to saved preset
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+  fields:
+    preset_id:
+      name: Preset ID
+      description: Preset number (1-256)
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 256
+          step: 1
+
+ptz_set_preset:
+  name: PTZ set preset
+  description: Save current position as preset
+  target:
+    entity:
+      integration: openipc
+      domain: camera
+  fields:
+    preset_id:
+      name: Preset ID
+      description: Preset number (1-256)
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 256
+          step: 1
+    name:
+      name: Preset name
+      description: Name for the preset (optional)
+      required: false
+      example: "Entrance gate"
+      selector:
+        text:

@@ -1,0 +1,101 @@
+# English translations for OpenIPC Bridge UI
+
+# General
+app_name: "OpenIPC Bridge"
+save: "Save"
+cancel: "Cancel"
+delete: "Delete"
+add: "Add"
+edit: "Edit"
+close: "Close"
+confirm: "Confirm"
+success: "Success"
+error: "Error"
+loading: "Loading..."
+
+# Navigation
+tab_cameras: "Cameras"
+tab_tts: "TTS Settings"
+tab_logging: "Logging"
+tab_system: "System"
+
+# Cameras tab
+camera_configuration: "Camera Configuration"
+add_camera: "Add Camera"
+delete_camera: "Delete Camera"
+camera_name: "Camera Name"
+camera_ip: "IP Address"
+camera_type: "Camera Type"
+camera_username: "Username"
+camera_password: "Password"
+snapshot_endpoints: "Snapshot Endpoints"
+add_endpoint: "Add Endpoint"
+tts_endpoint: "TTS Endpoint"
+tts_format: "TTS Format"
+relay_endpoints: "Relay Endpoints"
+relay1_on: "Relay 1 ON"
+relay1_off: "Relay 1 OFF"
+relay2_on: "Relay 2 ON"
+relay2_off: "Relay 2 OFF"
+
+# Camera types
+type_openipc: "OpenIPC"
+type_beward: "Beward"
+type_vivotek: "Vivotek"
+
+# TTS formats
+format_pcm: "PCM (OpenIPC)"
+format_alaw: "A-law (Beward)"
+
+# TTS tab
+tts_provider: "TTS Provider"
+provider_google: "Google TTS"
+provider_rhvoice: "RHVoice"
+
+# Google TTS
+google_language: "Language"
+google_slow: "Slow pronunciation"
+
+# RHVoice
+rhvoice_voice: "Voice"
+rhvoice_voice_anna: "Anna"
+rhvoice_voice_irina: "Irina"
+rhvoice_voice_elena: "Elena"
+rhvoice_voice_aleksandr: "Aleksandr"
+rhvoice_language: "Language"
+rhvoice_speed: "Speed (0.5 - 2.0)"
+
+# Logging tab
+logging_settings: "Logging Settings"
+log_level: "Log Level"
+log_level_debug: "DEBUG"
+log_level_info: "INFO"
+log_level_warning: "WARNING"
+log_level_error: "ERROR"
+debug_qr: "Save debug QR images"
+max_debug_images: "Maximum debug images"
+
+# System tab
+system_information: "System Information"
+system_status: "Status"
+system_uptime: "Uptime"
+system_requests: "Total Requests"
+system_active_scans: "Active Scans"
+qr_statistics: "QR Statistics"
+qr_total: "Total Requests"
+qr_success: "Successful Scans"
+qr_failed: "Failed Scans"
+qr_codes_found: "Codes Found"
+qr_last_code: "Last Code"
+reload_config: "Reload Configuration"
+clear_debug: "Clear Debug Images"
+
+# Status messages
+status_running: "Running"
+status_stopped: "Stopped"
+config_saved: "Configuration saved successfully"
+config_reloaded: "Configuration reloaded"
+debug_cleared: "Debug images cleared"
+error_saving_config: "Error saving configuration"
+error_loading_config: "Error loading configuration"
+confirm_delete_camera: "Are you sure you want to delete this camera?"

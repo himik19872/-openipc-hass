@@ -1,0 +1,52 @@
+# OpenIPC Bridge Configuration - автоматически создается при первом запуске
+
+# Настройки камер
+cameras:
+  - name: "OpenIPC SIP"           # Название камеры
+    ip: "192.168.1.4"              # IP адрес
+    type: "openipc"                # Тип: openipc, beward, vivotek
+    username: "root"                # Логин
+    password: "12345"               # Пароль
+    snapshot_endpoints:             # Эндпоинты для получения снимков
+      - "/image.jpg"
+      - "/cgi-bin/api.cgi?cmd=Snap&channel=0"
+    tts_endpoint: "/play_audio"     # Эндпоинт для TTS
+    tts_format: "pcm"               # Формат: pcm (OpenIPC), alaw (Beward)
+    relay_endpoints:                 # Эндпоинты для реле (если есть)
+      relay1_on: "/cgi-bin/relay.cgi?relay=1&state=1"
+      relay1_off: "/cgi-bin/relay.cgi?relay=1&state=0"
+      relay2_on: "/cgi-bin/relay.cgi?relay=2&state=1"
+      relay2_off: "/cgi-bin/relay.cgi?relay=2&state=0"
+
+  - name: "Beward Doorbell"
+    ip: "192.168.1.10"
+    type: "beward"
+    username: "admin"
+    password: "Q96811621w"
+    snapshot_endpoints:
+      - "/cgi-bin/jpg/image.cgi"
+      - "/cgi-bin/snapshot.cgi"
+    tts_endpoint: "/cgi-bin/audio/transmit.cgi"
+    tts_format: "alaw"
+    relay_endpoints:
+      relay1_on: "/cgi-bin/intercom_cgi?action=maindoor"
+      relay1_off: "/cgi-bin/intercom_cgi?action=maindoor&close=1"
+      relay2_on: "/cgi-bin/intercom_cgi?action=altdoor"
+      relay2_off: "/cgi-bin/intercom_cgi?action=altdoor&close=1"
+
+# Настройки TTS
+tts:
+  provider: "google"                 # google, rhvoice
+  google:
+    language: "ru"                   # ru, en, etc
+    slow: false                      # медленное произношение
+  rhvoice:
+    voice: "anna"                    # Голос
+    language: "ru"                   
+    speed: 1.0                       # Скорость 0.5-2.0
+
+# Настройки логирования
+logging:
+  level: "INFO"                      # DEBUG, INFO, WARNING, ERROR
+  debug_qr: true                     # Сохранять отладочные снимки
+  max_debug_images: 100               # Максимум отладочных снимков

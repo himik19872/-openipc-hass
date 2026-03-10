@@ -1,0 +1,150 @@
+blueprint:
+  name: OpenIPC QR Code Scanner
+  description: Сканирует QR код на камере OpenIPC
+  domain: automation
+  author: OpenIPC Team
+  input:
+    camera_entity:
+      name: Камера
+      selector:
+        entity:
+          domain: camera
+          integration: openipc
+    media_player:
+      name: Медиа-плеер
+      selector:
+        entity:
+          domain: media_player
+          integration: openipc
+    relay_switch:
+      name: Реле
+      selector:
+        entity:
+          domain: switch
+      default: ""
+    expected_code:
+      name: Ожидаемый код
+      selector:
+        text:
+      default: ""
+    scan_timeout:
+      name: Таймаут
+      selector:
+        number:
+          min: 10
+          max: 300
+      default: 60
+    trigger_entity:
+      name: Кнопка запуска
+      selector:
+        entity:
+          domain: input_boolean
+      default: ""
+
+trigger_variables:
+  camera_entity: !input camera_entity
+
+trigger:
+  - platform: state
+    entity_id: !input trigger_entity
+    to: "on"
+    id: start
+  - platform: event
+    event_type: openipc_qr_detected
+    event_data:
+      camera: !input camera_entity
+    id: qr_detected
+  - platform: event
+    event_type: openipc_qr_timeout
+    event_data:
+      camera: !input camera_entity
+    id: timeout
+
+variables:
+  camera: !input camera_entity
+  media: !input media_player
+  relay: !input relay_switch
+  expected: !input expected_code
+  timeout_val: !input scan_timeout
+  trigger_ent: !input trigger_entity
+
+action:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: start
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ trigger_ent != '' }}"
+            then:
+              - service: input_boolean.turn_off
+                target:
+                  entity_id: "{{ trigger_ent }}"
+          - service: openipc.start_qr_scan
+            data:
+              entity_id: "{{ camera }}"
+              expected_code: "{{ expected }}"
+              timeout: "{{ timeout_val }}"
+
+      - conditions:
+          - condition: trigger
+            id: qr_detected
+        sequence:
+          - variables:
+              qr_data: "{{ trigger.event.data.data }}"
+              code_valid: "{{ expected == '' or expected in qr_data }}"
+          - service: media_player.play_media
+            target:
+              entity_id: "{{ media }}"
+            data:
+              media_content_id: "QR код обнаружен"
+              media_content_type: "tts"
+          - delay: "00:00:01"
+          - if:
+              - condition: template
+                value_template: "{{ code_valid }}"
+            then:
+              - service: media_player.play_media
+                target:
+                  entity_id: "{{ media }}"
+                data:
+                  media_content_id: "Доступ разрешен"
+                  media_content_type: "tts"
+              - if:
+                  - condition: template
+                    value_template: "{{ relay != '' }}"
+                then:
+                  - service: switch.turn_on
+                    target:
+                      entity_id: "{{ relay }}"
+                  - delay: "00:00:01"
+                  - service: switch.turn_off
+                    target:
+                      entity_id: "{{ relay }}"
+            else:
+              - service: media_player.play_media
+                target:
+                  entity_id: "{{ media }}"
+                data:
+                  media_content_id: "Неверный код"
+                  media_content_type: "tts"
+          - service: openipc.qr_stop
+            data:
+              entity_id: "{{ camera }}"
+
+      - conditions:
+          - condition: trigger
+            id: timeout
+        sequence:
+          - service: media_player.play_media
+            target:
+              entity_id: "{{ media }}"
+            data:
+              media_content_id: "Время истекло"
+              media_content_type: "tts"
+          - service: openipc.qr_stop
+            data:
+              entity_id: "{{ camera }}"
+
+mode: single

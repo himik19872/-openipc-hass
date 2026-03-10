@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OpenIPC Bridge Configuration</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+        }
+        .camera-card {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .camera-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .camera-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .delete-btn {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .delete-btn:hover {
+            background: #d32f2f;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        .endpoint-group {
+            background: #fff;
+            padding: 10px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .endpoint-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #666;
+        }
+        .add-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .add-btn:hover {
+            background: #45a049;
+        }
+        .save-btn {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        .save-btn:hover {
+            background: #1976D2;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+            border-radius: 4px 4px 0 0;
+        }
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 14px 16px;
+            transition: 0.3s;
+            font-size: 16px;
+        }
+        .tab button:hover {
+            background-color: #ddd;
+        }
+        .tab button.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .tabcontent {
+            display: none;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+        }
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 10px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 OpenIPC Bridge Configuration</h1>
+        
+        <div class="tab">
+            <button class="tablinks active" onclick="openTab(event, 'cameras')">📹 Cameras</button>
+            <button class="tablinks" onclick="openTab(event, 'tts')">🔊 TTS Settings</button>
+            <button class="tablinks" onclick="openTab(event, 'logging')">📊 Logging</button>
+            <button class="tablinks" onclick="openTab(event, 'system')">⚙️ System</button>
+        </div>
+
+        <div id="status" class="status"></div>
+
+        <div id="cameras" class="tabcontent" style="display: block;">
+            <h2>Camera Configuration</h2>
+            <div id="cameras-list"></div>
+            <button class="add-btn" onclick="addCamera()">➕ Add Camera</button>
+        </div>
+
+        <div id="tts" class="tabcontent">
+            <h2>TTS Provider Settings</h2>
+            <div class="form-group">
+                <label>Provider:</label>
+                <select id="tts-provider" onchange="toggleTTSProvider()">
+                    <option value="google">Google TTS</option>
+                    <option value="rhvoice">RHVoice</option>
+                </select>
+            </div>
+            
+            <div id="google-settings">
+                <h3>Google TTS</h3>
+                <div class="form-group">
+                    <label>Language:</label>
+                    <input type="text" id="google-language" value="ru">
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="google-slow"> Slow pronunciation
+                    </label>
+                </div>
+            </div>
+
+            <div id="rhvoice-settings" style="display: none;">
+                <h3>RHVoice</h3>
+                <div class="form-group">
+                    <label>Voice:</label>
+                    <select id="rhvoice-voice">
+                        <option value="anna">Anna</option>
+                        <option value="irina">Irina</option>
+                        <option value="elena">Elena</option>
+                        <option value="aleksandr">Aleksandr</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Language:</label>
+                    <input type="text" id="rhvoice-language" value="ru">
+                </div>
+                <div class="form-group">
+                    <label>Speed (0.5 - 2.0):</label>
+                    <input type="number" id="rhvoice-speed" min="0.5" max="2.0" step="0.1" value="1.0">
+                </div>
+            </div>
+        </div>
+
+        <div id="logging" class="tabcontent">
+            <h2>Logging Settings</h2>
+            <div class="form-group">
+                <label>Log Level:</label>
+                <select id="log-level">
+                    <option value="DEBUG">DEBUG</option>
+                    <option value="INFO" selected>INFO</option>
+                    <option value="WARNING">WARNING</option>
+                    <option value="ERROR">ERROR</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="debug-qr" checked> Save debug QR images
+                </label>
+            </div>
+            <div class="form-group">
+                <label>Max debug images:</label>
+                <input type="number" id="max-debug-images" min="10" max="1000" value="100">
+            </div>
+        </div>
+
+        <div id="system" class="tabcontent">
+            <h2>System Information</h2>
+            <div class="info-box">
+                <p><strong>Status:</strong> <span id="system-status">Running</span></p>
+                <p><strong>Uptime:</strong> <span id="system-uptime">-</span></p>
+                <p><strong>Requests:</strong> <span id="system-requests">0</span></p>
+                <p><strong>Active scans:</strong> <span id="system-scans">0</span></p>
+            </div>
+            <div class="info-box">
+                <h3>QR Statistics</h3>
+                <p><strong>Total requests:</strong> <span id="qr-total">0</span></p>
+                <p><strong>Successful scans:</strong> <span id="qr-success">0</span></p>
+                <p><strong>Failed scans:</strong> <span id="qr-failed">0</span></p>
+                <p><strong>Codes found:</strong> <span id="qr-codes">0</span></p>
+                <p><strong>Last code:</strong> <span id="qr-last">-</span></p>
+            </div>
+            <button class="add-btn" onclick="reloadConfig()">🔄 Reload Config</button>
+            <button class="add-btn" onclick="clearDebug()">🗑️ Clear Debug Images</button>
+        </div>
+
+        <button class="save-btn" onclick="saveConfig()">💾 Save Configuration</button>
+    </div>
+
+    <script>
+        let config = null;
+
+        function openTab(evt, tabName) {
+            var i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            tablinks = document.getElementsByClassName("tablinks");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+
+        function toggleTTSProvider() {
+            const provider = document.getElementById('tts-provider').value;
+            document.getElementById('google-settings').style.display = provider === 'google' ? 'block' : 'none';
+            document.getElementById('rhvoice-settings').style.display = provider === 'rhvoice' ? 'block' : 'none';
+        }
+
+        function showStatus(message, isError = false) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status ' + (isError ? 'error' : 'success');
+            status.style.display = 'block';
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 5000);
+        }
+
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                const data = await response.json();
+                if (data.success) {
+                    config = data.config;
+                    renderCameras();
+                    loadTTSConfig();
+                    loadLoggingConfig();
+                    loadSystemInfo();
+                }
+            } catch (error) {
+                showStatus('Error loading config: ' + error, true);
+            }
+        }
+
+        function renderCameras() {
+            const container = document.getElementById('cameras-list');
+            container.innerHTML = '';
+            
+            config.cameras.forEach((camera, index) => {
+                const cameraDiv = document.createElement('div');
+                cameraDiv.className = 'camera-card';
+                cameraDiv.innerHTML = `
+                    <div class="camera-header">
+                        <span class="camera-title">Camera ${index + 1}: ${camera.name}</span>
+                        <button class="delete-btn" onclick="removeCamera(${index})">🗑️ Delete</button>
+                    </div>
+                    <div class="form-group">
+                        <label>Name:</label>
+                        <input type="text" id="cam_${index}_name" value="${camera.name}">
+                    </div>
+                    <div class="form-group">
+                        <label>IP Address:</label>
+                        <input type="text" id="cam_${index}_ip" value="${camera.ip}">
+                    </div>
+                    <div class="form-group">
+                        <label>Type:</label>
+                        <select id="cam_${index}_type">
+                            <option value="openipc" ${camera.type === 'openipc' ? 'selected' : ''}>OpenIPC</option>
+                            <option value="beward" ${camera.type === 'beward' ? 'selected' : ''}>Beward</option>
+                            <option value="vivotek" ${camera.type === 'vivotek' ? 'selected' : ''}>Vivotek</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Username:</label>
+                        <input type="text" id="cam_${index}_username" value="${camera.username}">
+                    </div>
+                    <div class="form-group">
+                        <label>Password:</label>
+                        <input type="password" id="cam_${index}_password" value="${camera.password}">
+                    </div>
+                    <div class="endpoint-group">
+                        <div class="endpoint-title">Snapshot Endpoints:</div>
+                        <div id="snap_${index}_container">
+                            ${camera.snapshot_endpoints.map((ep, epIndex) => `
+                                <div style="display: flex; gap: 5px; margin-bottom: 5px;">
+                                    <input type="text" id="cam_${index}_snap_${epIndex}" value="${ep}" style="flex: 1;">
+                                    <button onclick="removeSnapshotEndpoint(${index}, ${epIndex})">✖</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <button class="add-btn" onclick="addSnapshotEndpoint(${index})">➕ Add Endpoint</button>
+                    </div>
+                    <div class="form-group">
+                        <label>TTS Endpoint:</label>
+                        <input type="text" id="cam_${index}_tts_endpoint" value="${camera.tts_endpoint}">
+                    </div>
+                    <div class="form-group">
+                        <label>TTS Format:</label>
+                        <select id="cam_${index}_tts_format">
+                            <option value="pcm" ${camera.tts_format === 'pcm' ? 'selected' : ''}>PCM (OpenIPC)</option>
+                            <option value="alaw" ${camera.tts_format === 'alaw' ? 'selected' : ''}>A-law (Beward)</option>
+                        </select>
+                    </div>
+                    <div class="endpoint-group">
+                        <div class="endpoint-title">Relay Endpoints:</div>
+                        <div class="form-group">
+                            <label>Relay 1 ON:</label>
+                            <input type="text" id="cam_${index}_relay1_on" value="${camera.relay_endpoints?.relay1_on || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>Relay 1 OFF:</label>
+                            <input type="text" id="cam_${index}_relay1_off" value="${camera.relay_endpoints?.relay1_off || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>Relay 2 ON:</label>
+                            <input type="text" id="cam_${index}_relay2_on" value="${camera.relay_endpoints?.relay2_on || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>Relay 2 OFF:</label>
+                            <input type="text" id="cam_${index}_relay2_off" value="${camera.relay_endpoints?.relay2_off || ''}">
+                        </div>
+                    </div>
+                `;
+                container.appendChild(cameraDiv);
+            });
+        }
+
+        function addSnapshotEndpoint(cameraIndex) {
+            const container = document.getElementById(`snap_${cameraIndex}_container`);
+            const newIndex = container.children.length;
+            const div = document.createElement('div');
+            div.style.display = 'flex';
+            div.style.gap = '5px';
+            div.style.marginBottom = '5px';
+            div.innerHTML = `
+                <input type="text" id="cam_${cameraIndex}_snap_${newIndex}" value="/new/endpoint" style="flex: 1;">
+                <button onclick="removeSnapshotEndpoint(${cameraIndex}, ${newIndex})">✖</button>
+            `;
+            container.appendChild(div);
+        }
+
+        function removeSnapshotEndpoint(cameraIndex, endpointIndex) {
+            const element = document.getElementById(`cam_${cameraIndex}_snap_${endpointIndex}`)?.parentElement;
+            if (element) {
+                element.remove();
+            }
+        }
+
+        function addCamera() {
+            if (!config) config = { cameras: [] };
+            config.cameras.push({
+                name: "New Camera",
+                ip: "192.168.1.x",
+                type: "openipc",
+                username: "root",
+                password: "",
+                snapshot_endpoints: ["/image.jpg"],
+                tts_endpoint: "/play_audio",
+                tts_format: "pcm",
+                relay_endpoints: {}
+            });
+            renderCameras();
+        }
+
+        function removeCamera(index) {
+            config.cameras.splice(index, 1);
+            renderCameras();
+        }
+
+        function loadTTSConfig() {
+            document.getElementById('tts-provider').value = config.tts?.provider || 'google';
+            document.getElementById('google-language').value = config.tts?.google?.language || 'ru';
+            document.getElementById('google-slow').checked = config.tts?.google?.slow || false;
+            document.getElementById('rhvoice-voice').value = config.tts?.rhvoice?.voice || 'anna';
+            document.getElementById('rhvoice-language').value = config.tts?.rhvoice?.language || 'ru';
+            document.getElementById('rhvoice-speed').value = config.tts?.rhvoice?.speed || '1.0';
+            toggleTTSProvider();
+        }
+
+        function loadLoggingConfig() {
+            document.getElementById('log-level').value = config.logging?.level || 'INFO';
+            document.getElementById('debug-qr').checked = config.logging?.debug_qr !== false;
+            document.getElementById('max-debug-images').value = config.logging?.max_debug_images || 100;
+        }
+
+        async function loadSystemInfo() {
+            try {
+                const response = await fetch('/');
+                const data = await response.json();
+                document.getElementById('system-uptime').textContent = data.started_at;
+                document.getElementById('system-requests').textContent = data.requests;
+                document.getElementById('system-scans').textContent = data.active_scans;
+                
+                const qrResponse = await fetch('/api/qr/stats');
+                const qrData = await qrResponse.json();
+                if (qrData.success) {
+                    document.getElementById('qr-total').textContent = qrData.stats.total_requests;
+                    document.getElementById('qr-success').textContent = qrData.stats.successful_scans;
+                    document.getElementById('qr-failed').textContent = qrData.stats.failed_scans;
+                    document.getElementById('qr-codes').textContent = qrData.stats.total_codes_found;
+                    document.getElementById('qr-last').textContent = qrData.stats.last_code || '-';
+                }
+            } catch (error) {
+                console.error('Error loading system info:', error);
+            }
+        }
+
+        async function saveConfig() {
+            try {
+                // Собираем данные из формы
+                const newConfig = {
+                    cameras: [],
+                    tts: {
+                        provider: document.getElementById('tts-provider').value,
+                        google: {
+                            language: document.getElementById('google-language').value,
+                            slow: document.getElementById('google-slow').checked
+                        },
+                        rhvoice: {
+                            voice: document.getElementById('rhvoice-voice').value,
+                            language: document.getElementById('rhvoice-language').value,
+                            speed: parseFloat(document.getElementById('rhvoice-speed').value)
+                        }
+                    },
+                    logging: {
+                        level: document.getElementById('log-level').value,
+                        debug_qr: document.getElementById('debug-qr').checked,
+                        max_debug_images: parseInt(document.getElementById('max-debug-images').value)
+                    }
+                };
+
+                // Собираем данные камер
+                for (let i = 0; i < config.cameras.length; i++) {
+                    const snapshotEndpoints = [];
+                    let epIndex = 0;
+                    while (document.getElementById(`cam_${i}_snap_${epIndex}`)) {
+                        const value = document.getElementById(`cam_${i}_snap_${epIndex}`).value;
+                        if (value) snapshotEndpoints.push(value);
+                        epIndex++;
+                    }
+
+                    const camera = {
+                        name: document.getElementById(`cam_${i}_name`).value,
+                        ip: document.getElementById(`cam_${i}_ip`).value,
+                        type: document.getElementById(`cam_${i}_type`).value,
+                        username: document.getElementById(`cam_${i}_username`).value,
+                        password: document.getElementById(`cam_${i}_password`).value,
+                        snapshot_endpoints: snapshotEndpoints,
+                        tts_endpoint: document.getElementById(`cam_${i}_tts_endpoint`).value,
+                        tts_format: document.getElementById(`cam_${i}_tts_format`).value,
+                        relay_endpoints: {}
+                    };
+
+                    const relay1_on = document.getElementById(`cam_${i}_relay1_on`)?.value;
+                    const relay1_off = document.getElementById(`cam_${i}_relay1_off`)?.value;
+                    const relay2_on = document.getElementById(`cam_${i}_relay2_on`)?.value;
+                    const relay2_off = document.getElementById(`cam_${i}_relay2_off`)?.value;
+
+                    if (relay1_on || relay1_off) {
+                        camera.relay_endpoints.relay1_on = relay1_on;
+                        camera.relay_endpoints.relay1_off = relay1_off;
+                    }
+                    if (relay2_on || relay2_off) {
+                        camera.relay_endpoints.relay2_on = relay2_on;
+                        camera.relay_endpoints.relay2_off = relay2_off;
+                    }
+
+                    newConfig.cameras.push(camera);
+                }
+
+                // Отправляем на сервер
+                const response = await fetch('/api/config/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newConfig)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    showStatus('✅ Configuration saved successfully!');
+                    config = newConfig;
+                } else {
+                    showStatus('❌ Error saving config: ' + result.error, true);
+                }
+            } catch (error) {
+                showStatus('❌ Error: ' + error, true);
+            }
+        }
+
+        async function reloadConfig() {
+            try {
+                const response = await fetch('/api/config/reload', { method: 'POST' });
+                const result = await response.json();
+                if (result.success) {
+                    showStatus('✅ Configuration reloaded');
+                    loadConfig();
+                }
+            } catch (error) {
+                showStatus('❌ Error reloading config: ' + error, true);
+            }
+        }
+
+        async function clearDebug() {
+            // Функция очистки отладочных снимков
+            showStatus('Debug images cleared');
+        }
+
+        // Загружаем конфигурацию при старте
+        loadConfig();
+        setInterval(loadSystemInfo, 5000); // Обновляем системную информацию каждые 5 секунд
+    </script>
+</body>
+</html>

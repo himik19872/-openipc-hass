@@ -1,0 +1,27 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "OpenIPC Camera",
+        "description": "Enter your OpenIPC camera details",
+        "data": {
+          "name": "Camera Name",
+          "host": "IP Address",
+          "port": "HTTP Port",
+          "rtsp_port": "RTSP Port",
+          "username": "Username",
+          "password": "Password",
+          "stream_profile": "Stream Profile"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to camera",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Camera already configured"
+    }
+  }
+}
