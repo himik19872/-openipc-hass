@@ -17,21 +17,23 @@
 | ![Снимок экрана 2026-02-22 130426](https://github.com/himik19872/openipc-hass/blob/main/Снимок%20экрана%202026-02-22%20130426.png) | ![Снимок экрана 2026-02-22 130505](https://github.com/himik19872/openipc-hass/blob/main/Снимок%20экрана%202026-02-22%20130505.png) | ![Снимок экрана 2026-02-22 130520](https://github.com/himik19872/openipc-hass/blob/main/Снимок%20экрана%202026-02-22%20130520.png) |
 
 ![Снимок экрана 2026-02-22 130554](https://github.com/himik19872/openipc-hass/blob/main/Снимок%20экрана%202026-02-22%20130554.png)
+## English
+
 ### OpenIPC Ecosystem for Home Assistant
 
 This repository contains everything you need to integrate your **OpenIPC**, **Beward**, and **Vivotek** cameras into Home Assistant. It includes a custom integration and a powerful addon (OpenIPC Bridge) for advanced features like **QR code scanning** and **Text-to-Speech (TTS)**.
 
 ### ✨ Features
 
-*   **📹 Video Surveillance:** RTSP streams, snapshots, recording to HA media.
-*   **📊 Monitoring:** CPU temp, FPS, bitrate, SD card status, network stats.
-*   **🚨 Events:** Motion detection, door status (Beward), LNPR (Beward).
-*   **🔊 Text-to-Speech (TTS):** Voice notifications via camera speaker.
-    *   **Beward DS07P-LP:** A-law format.
-    *   **OpenIPC:** PCM format.
-*   **📱 Notifications:** Telegram with photos and videos.
-*   **➕ NEW: QR Code Scanner!** Scan QR codes via the OpenIPC Bridge addon to trigger automations (e.g., open a gate, grant access).
-*   **🔄 Blueprint:** Ready-to-use automation blueprint for QR scanning.
+- **📹 Video Surveillance:** RTSP streams, snapshots, recording to HA media.
+- **📊 Monitoring:** CPU temp, FPS, bitrate, SD card status, network stats.
+- **🚨 Events:** Motion detection, door status (Beward), LNPR (Beward).
+- **🔊 Text-to-Speech (TTS):** Voice notifications via camera speaker.
+  - **Beward DS07P-LP:** A-law format.
+  - **OpenIPC:** PCM format.
+- **📱 Notifications:** Telegram with photos and videos.
+- **➕ NEW: QR Code Scanner!** Scan QR codes via the OpenIPC Bridge addon to trigger automations (e.g., open a gate, grant access).
+- **🔄 Blueprint:** Ready-to-use automation blueprint for QR scanning.
 
 ### 📦 Installation
 
@@ -71,6 +73,7 @@ You can install the integration via HACS or manually.
 
 #### Setting up Telegram (Optional)
 Add to your `configuration.yaml`:
+
 ```yaml
 openipc:
   telegram_bot_token: "YOUR_BOT_TOKEN"
@@ -138,42 +141,8 @@ Pull requests are welcome!
 
 📜 License
 MIT
-интеграция для управления IP-камерами на базе прошивок **OpenIPC**, **Beward** и **Vivotek** в Home Assistant. Поддерживает видеонаблюдение, запись, уведомления в Telegram, голосовые оповещения (TTS) и распознавание автомобильных номеров (LNPR) для Beward DS07P-LP.
 
-## ✨ Возможности
-
-### 📹 **Видеонаблюдение**
-- Просмотр RTSP-потока (main/sub)
-- Получение снимков с камеры
-- Запись видео в медиа-папку HA
-- OSD (наложение текста на видео)
-
-### 📊 **Мониторинг**
-- Температура CPU
-- FPS, битрейт, разрешение
-- Время работы (uptime)
-- Состояние microSD-карты
-- Сетевая статистика
-
-### 🚨 **События**
-- Детекция движения
-- Состояние двери (для Beward)
-- Тревожные события
-- **LNPR** - распознавание автономеров (Beward DS07P-LP)
-
-### 🔊 **Голосовые оповещения (TTS)**
-- **Beward DS07P-LP** - через встроенный динамик (формат A-law)
-- **OpenIPC камеры** - через подключенный динамик (формат PCM)
-- Поддержка русского и английского языков
-- Индивидуальные и групповые оповещения
-
-### 📱 **Интеграции**
-- Telegram (отправка видео и снимков)
-- Автоматизации на все события
-- Поддержка нескольких камер
-
----
-
+Русский
 OpenIPC Экосистема для Home Assistant
 Этот репозиторий содержит всё необходимое для интеграции ваших камер OpenIPC, Beward и Vivotek в Home Assistant. Включает пользовательскую интеграцию и мощный аддон (OpenIPC Bridge) для расширенных функций, таких как сканирование QR-кодов и Text-to-Speech (TTS).
 
@@ -311,7 +280,6 @@ data:
 
 📜 Лицензия
 MIT
-
 
 
 
