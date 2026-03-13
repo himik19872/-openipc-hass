@@ -17,406 +17,269 @@
 | ![Снимок экрана 2026-02-22 130426](https://github.com/himik19872/openipc-hass/blob/main/Снимок%20экрана%202026-02-22%20130426.png) | ![Снимок экрана 2026-02-22 130505](https://github.com/himik19872/openipc-hass/blob/main/Снимок%20экрана%202026-02-22%20130505.png) | ![Снимок экрана 2026-02-22 130520](https://github.com/himik19872/openipc-hass/blob/main/Снимок%20экрана%202026-02-22%20130520.png) |
 
 ![Снимок экрана 2026-02-22 130554](https://github.com/himik19872/openipc-hass/blob/main/Снимок%20экрана%202026-02-22%20130554.png)
+## English
 
-интеграция для управления IP-камерами на базе прошивок **OpenIPC**, **Beward** и **Vivotek** в Home Assistant. Поддерживает видеонаблюдение, запись, уведомления в Telegram, голосовые оповещения (TTS) и распознавание автомобильных номеров (LNPR) для Beward DS07P-LP.
+### OpenIPC Ecosystem for Home Assistant
 
-## ✨ Возможности
+This repository contains everything you need to integrate your **OpenIPC**, **Beward**, and **Vivotek** cameras into Home Assistant. It includes a custom integration and a powerful addon (OpenIPC Bridge) for advanced features like **QR code scanning** and **Text-to-Speech (TTS)**.
 
-### 📹 **Видеонаблюдение**
-- Просмотр RTSP-потока (main/sub)
-- Получение снимков с камеры
-- Запись видео в медиа-папку HA
-- OSD (наложение текста на видео)
+### ✨ Features
 
-### 📊 **Мониторинг**
-- Температура CPU
-- FPS, битрейт, разрешение
-- Время работы (uptime)
-- Состояние microSD-карты
-- Сетевая статистика
+- **📹 Video Surveillance:** RTSP streams, snapshots, recording to HA media.
+- **📊 Monitoring:** CPU temp, FPS, bitrate, SD card status, network stats.
+- **🚨 Events:** Motion detection, door status (Beward), LNPR (Beward).
+- **🔊 Text-to-Speech (TTS):** Voice notifications via camera speaker.
+  - **Beward DS07P-LP:** A-law format.
+  - **OpenIPC:** PCM format.
+- **📱 Notifications:** Telegram with photos and videos.
+- **➕ NEW: QR Code Scanner!** Scan QR codes via the OpenIPC Bridge addon to trigger automations (e.g., open a gate, grant access).
+- **🔄 Blueprint:** Ready-to-use automation blueprint for QR scanning.
 
-### 🚨 **События**
-- Детекция движения
-- Состояние двери (для Beward)
-- Тревожные события
-- **LNPR** - распознавание автономеров (Beward DS07P-LP)
+### 📦 Installation
 
-### 🔊 **Голосовые оповещения (TTS)**
-- **Beward DS07P-LP** - через встроенный динамик (формат A-law)
-- **OpenIPC камеры** - через подключенный динамик (формат PCM)
-- Поддержка русского и английского языков
-- Индивидуальные и групповые оповещения
+#### 1. OpenIPC Bridge Addon (Required for QR & TTS)
 
-### 📱 **Интеграции**
-- Telegram (отправка видео и снимков)
-- Автоматизации на все события
-- Поддержка нескольких камер
+This addon handles QR scanning and TTS generation, removing the need for complex `shell_command` scripts.
 
----
+1.  Add this repository to your Supervisor add-on store:
+    *   Go to **Settings → Add-ons → Add-on store → ⋮ → Repositories**.
+    *   Add: `https://github.com/OpenIPC/hass`
+2.  Refresh the page. You'll find the new **OpenIPC Bridge** addon.
+3.  Install and start the addon. It will be available at `http://[your-ha-ip]:5000`.
+4.  **Configure** your cameras via the addon's **Web UI** (`http://[your-ha-ip]:5000/config`). Add your camera IPs, usernames, passwords, and endpoints.
 
-## 📦 Установка
+#### 2. OpenIPC Integration
 
-### Через HACS (рекомендуется)
+You can install the integration via HACS or manually.
 
-1. Откройте HACS в Home Assistant
-2. Нажмите на три точки в правом верхнем углу → **"Custom repositories"**
-3. Добавьте: `https://github.com/himik19872/openipc-hass` с категорией **"Integration"**
-4. Нажмите **"Add"**
-5. Найдите **"OpenIPC Camera"** в списке и установите
-6. Перезапустите Home Assistant
+##### HACS (Recommended)
+1.  Open HACS.
+2.  Go to **Integrations** and click the three dots in the top right → **Custom repositories**.
+3.  Add `https://github.com/OpenIPC/hass` with category **Integration**.
+4.  Click **Add** and then search for "OpenIPC Camera" in HACS to install.
+5.  **Restart** Home Assistant.
 
-### Ручная установка
+##### Manual
+1.  Download the latest release.
+2.  Copy the `openipc` folder from `custom_components` to your `/config/custom_components/` directory.
+3.  **Restart** Home Assistant.
 
-1. Скачайте последний [релиз](https://github.com/himik19872/openipc-hass/releases)
-2. Распакуйте содержимое в папку `/config/custom_components/openipc/`
-3. Перезапустите Home Assistant
+### ⚙️ Configuration
 
----
+#### Adding a Camera via UI
+1.  Go to **Settings → Devices & Services**.
+2.  Click **"Add Integration"** and search for **"OpenIPC Camera"**.
+3.  Fill in your camera details. **Crucially, select the correct `Device Type`** (OpenIPC, Beward, Vivotek).
 
-## ⚙️ Настройка
+#### Setting up Telegram (Optional)
+Add to your `configuration.yaml`:
 
-### 1. Добавление камеры через UI
-
-1. Перейдите в **Настройки** → **Устройства и службы**
-2. Нажмите **"Добавить интеграцию"**
-3. Найдите **"OpenIPC Camera"**
-4. Заполните форму:
-
-| Поле | Описание | Пример |
-|------|----------|--------|
-| **IP адрес** | Адрес камеры в сети | `192.168.1.100` |
-| **HTTP порт** | Порт веб-интерфейса | `80` |
-| **Имя пользователя** | Логин для доступа | `root` |
-| **Пароль** | Пароль | `12345` |
-| **Имя камеры** | Отображаемое имя | `Уличная камера` |
-| **RTSP порт** | Порт для видеопотока | `554` |
-| **Профиль потока** | Основной/дополнительный | `main` |
-| **Тип устройства** | Модель камеры | `OpenIPC` / `Beward` / `Vivotek` |
-
-> **Важно**: Выбор правильного типа критичен для работы специфических функций!
-
-### 2. Настройка Telegram (опционально)
-
-#### Способ 1 (через `configuration.yaml`):
 ```yaml
 openipc:
   telegram_bot_token: "YOUR_BOT_TOKEN"
   telegram_chat_id: "YOUR_CHAT_ID"
+🤖 Blueprint: QR Code Scanner
+This blueprint creates an automation that starts QR scanning on a button press, checks the code, and performs actions like TTS, relay toggling, and Telegram notifications.
 
-Способ 2 (через встроенную интеграцию):
-Установите и настройте официальную интеграцию Telegram bot
+How to use:
 
+Go to Settings → Automations → Blueprints.
 
-🔊 Настройка TTS (Text-to-Speech)
-Общие требования
-Для работы TTS необходимы:
+Click "Import Blueprint" and paste the raw URL to the blueprint file in this repo: https://github.com/OpenIPC/hass/blob/main/blueprints/automation/openipc/qr_scanner.yaml
 
-ffmpeg - для конвертации аудио
+Click "Preview" and then "Create Automation".
 
-gTTS - Python библиотека для генерации речи
+Fill in the required entities:
 
-curl - для отправки на камеры
+Camera (e.g., camera.openipc_sip)
 
-Установите зависимости (выполните в терминале HA один раз):
+Media Player (e.g., media_player.openipc_sip_speaker)
 
-apk add ffmpeg curl
-pip3 install gtts
+Relay (optional, e.g., switch.nspanel_relay_1)
 
-Автоматическое восстановление зависимостей
-Создайте файл /config/ffmpeg_install.sh:
+Expected QR Code
 
+Trigger Entity (an input_boolean helper you create to start the scan)
 
-#!/bin/bash
-echo "$(date): Проверка зависимостей..." >> /config/ffmpeg.log
+Telegram options.
 
-if ! command -v ffmpeg &> /dev/null; then
-    apk add ffmpeg >> /config/ffmpeg.log 2>&1
-fi
+📝 Example Automations
+Simple TTS Notification
+yaml
+alias: "Say Hello on Motion"
+trigger:
+  - platform: state
+    entity_id: binary_sensor.openipc_sip_motion
+    to: "on"
+action:
+  - service: media_player.play_media
+    target:
+      entity_id: media_player.openipc_sip_speaker
+    data:
+      media_content_id: "Hello, you are on camera!"
+      media_content_type: "tts"
+QR Scan for Gate Control
+(The blueprint above does this automatically. Here's the core service call)
 
-if ! command -v curl &> /dev/null; then
-    apk add curl >> /config/ffmpeg.log 2>&1
-fi
+yaml
+service: openipc.start_qr_scan
+data:
+  entity_id: camera.openipc_sip
+  expected_code: "my_secret_gate_code"
+  timeout: 60
+🆘 Support
+Check Home Assistant logs.
 
-if ! python3 -c "from gtts import gTTS" 2>/dev/null; then
-    pip3 install gtts >> /config/ffmpeg.log 2>&1
-fi
+Check the addon's logs in Supervisor.
 
+Verify camera connectivity (ping).
 
-Сделайте исполняемым и добавьте автоматизацию для запуска при старте HA.
+For TTS issues, check the addon's debug audio files in /config/www/.
 
-TTS для Beward DS07P-LP
-Скрипт генерации (/config/tts_cache/tts_generate.sh)
+🤝 Contributing
+Pull requests are welcome!
 
+📜 License
+MIT
 
-#!/bin/bash
-MESSAGE="$1"
-LANG="${2:-ru}"
-FILENAME="$3"
+Русский
+OpenIPC Экосистема для Home Assistant
+Этот репозиторий содержит всё необходимое для интеграции ваших камер OpenIPC, Beward и Vivotek в Home Assistant. Включает пользовательскую интеграцию и мощный аддон (OpenIPC Bridge) для расширенных функций, таких как сканирование QR-кодов и Text-to-Speech (TTS).
 
-if [ -z "$MESSAGE" ] || [ -z "$FILENAME" ]; then
-    echo "Использование: $0 <текст> <язык> <выходной_файл.alaw>"
-    exit 1
-fi
+✨ Возможности
+📹 Видеонаблюдение: RTSP-потоки, снимки, запись в медиа-папку HA.
 
-TIMESTAMP=$(date +%s)
-TEMP_MP3="/tmp/tts_${TIMESTAMP}.mp3"
+📊 Мониторинг: Температура CPU, FPS, битрейт, статус SD-карты, сетевая статистика.
 
-python3 -c "from gtts import gTTS; gTTS('''$MESSAGE''', lang='$LANG').save('$TEMP_MP3')" || exit 1
-ffmpeg -y -i "$TEMP_MP3" -ar 8000 -ac 1 -f alaw "$FILENAME" 2>/dev/null
-rm -f "$TEMP_MP3"
+🚨 События: Детекция движения, состояние двери (Beward), распознавание номеров (LNPR) для Beward.
 
+🔊 Голосовые оповещения (TTS): Через динамик камеры.
 
-#!/bin/bash
-MESSAGE="$1"
-LANG="${2:-ru}"
-FILENAME="$3"
+Beward DS07P-LP: Формат A-law.
 
-if [ -z "$MESSAGE" ] || [ -z "$FILENAME" ]; then
-    echo "Использование: $0 <текст> <язык> <выходной_файл.alaw>"
-    exit 1
-fi
+OpenIPC: Формат PCM.
 
-TIMESTAMP=$(date +%s)
-TEMP_MP3="/tmp/tts_${TIMESTAMP}.mp3"
+📱 Уведомления: Telegram с фото и видео.
 
-python3 -c "from gtts import gTTS; gTTS('''$MESSAGE''', lang='$LANG').save('$TEMP_MP3')" || exit 1
-ffmpeg -y -i "$TEMP_MP3" -ar 8000 -ac 1 -f alaw "$FILENAME" 2>/dev/null
-rm -f "$TEMP_MP3"
+➕ НОВИНКА: Сканер QR-кодов! Сканируйте QR-коды через аддон OpenIPC Bridge для запуска автоматизаций (например, открыть ворота, предоставить доступ).
 
+🔄 Блюпринт: Готовая автоматизация для сканирования QR-кодов.
 
-Команда в shell_commands.yaml:
+📦 Установка
+1. Аддон OpenIPC Bridge (Необходим для QR и TTS)
+Этот аддон обрабатывает сканирование QR и генерацию TTS, избавляя от необходимости в сложных скриптах shell_command.
 
-beward_say: "/config/tts_cache/tts_generate.sh '{{ message }}' 'ru' '/config/tts_cache/last.alaw' && curl -X POST -u 'admin:password' -H 'Content-Type: audio/G.711A' --data-binary '@/config/tts_cache/last.alaw' 'http://192.168.1.10/cgi-bin/audio/transmit.cgi'"
+Добавьте этот репозиторий в магазин аддонов Supervisor:
 
+Перейдите в Настройки → Аддоны → Магазин аддонов → ⋮ → Репозитории.
 
+Добавьте: https://github.com/OpenIPC/hass
 
-TTS для OpenIPC камер
-Скрипт генерации PCM (/config/tts_cache/tts_generate_openipc.sh)
+Обновите страницу. Вы увидите новый аддон OpenIPC Bridge.
 
+Установите и запустите аддон. Он будет доступен по адресу http://[IP-адрес-вашего-HA]:5000.
 
-#!/bin/bash
-MESSAGE="$1"
-LANG="${2:-ru}"
-FILENAME="$3"
+Настройте свои камеры через Веб-интерфейс аддона (http://[IP-адрес-вашего-HA]:5000/config). Добавьте IP-адреса камер, имена пользователей, пароли и эндпоинты.
 
-if [ -z "$MESSAGE" ] || [ -z "$FILENAME" ]; then
-    echo "Использование: $0 <текст> <язык> <выходной_файл.pcm>"
-    exit 1
-fi
-
-TIMESTAMP=$(date +%s)
-TEMP_MP3="/tmp/tts_${TIMESTAMP}.mp3"
+2. Интеграция OpenIPC
+Интеграцию можно установить через HACS или вручную.
 
-python3 -c "from gtts import gTTS; gTTS('''$MESSAGE''', lang='$LANG').save('$TEMP_MP3')" || exit 1
-ffmpeg -y -i "$TEMP_MP3" -ar 8000 -ac 1 -f s16le "$FILENAME" 2>/dev/null
-rm -f "$TEMP_MP3"
+HACS (Рекомендуется)
+Откройте HACS.
 
+Перейдите в Интеграции и нажмите три точки в правом верхнем углу → Пользовательские репозитории.
 
-Индивидуальные скрипты для каждой камеры
-Создайте скрипт для камеры, например /config/openipc_say_192_168_1_75.sh:
+Добавьте https://github.com/OpenIPC/hass с категорией Интеграция.
 
-#!/bin/bash
-MESSAGE="$1"
-TIMESTAMP=$(date +%s)
-PCM_FILE="/tmp/openipc_75_${TIMESTAMP}.pcm"
+Нажмите "Добавить", затем найдите "OpenIPC Camera" в HACS и установите.
 
-/config/tts_cache/tts_generate_openipc.sh "$MESSAGE" "ru" "$PCM_FILE"
+Перезапустите Home Assistant.
 
-if [ -f "$PCM_FILE" ]; then
-    curl -u "root:12345" --data-binary "@$PCM_FILE" "http://192.168.1.75/play_audio"
-    rm -f "$PCM_FILE"
-fi
+Вручную
+Скачайте последний релиз.
 
-
-Команды в shell_commands.yaml:
+Скопируйте папку openipc из custom_components в вашу директорию /config/custom_components/.
 
-openipc_say_75: "/config/openipc_say_192_168_1_75.sh '{{ message }}'"
-openipc_say_106: "/config/openipc_say_192_168_1_106.sh '{{ message }}'"
-openipc_say_91: "/config/openipc_say_192_168_1_91.sh '{{ message }}'"
+Перезапустите Home Assistant.
 
+⚙️ Настройка
+Добавление камеры через UI
+Перейдите в Настройки → Устройства и службы.
 
-Скрипты в scripts.yaml:
+Нажмите "Добавить интеграцию" и найдите "OpenIPC Camera".
 
+Заполните данные камеры. Крайне важно выбрать правильный Тип устройства (OpenIPC, Beward, Vivotek).
 
-openipc_say_75:
-  alias: OpenIPC 75 - Сказать текст
-  sequence:
-    - action: shell_command.openipc_say_75
-      data:
-        message: "{{ message }}"
-  fields:
-    message:
-      description: "Текст для озвучивания"
-      required: true
-      selector:
-        text:
+Настройка Telegram (Опционально)
+Добавьте в ваш configuration.yaml:
 
-openipc_say_all:
-  alias: OpenIPC - Сказать на все камеры
-  sequence:
-    - parallel:
-        - action: script.openipc_say_75
-          data:
-            message: "{{ message }}"
-        - action: script.openipc_say_106
-          data:
-            message: "{{ message }}"
-        - action: script.openipc_say_91
-          data:
-            message: "{{ message }}"
-  fields:
-    message:
-      description: "Текст для озвучивания"
-      required: true
-
-
-Настройка камер OpenIPC
-Для работы TTS необходимо изменить кодек на PCM:
-
-ssh root@192.168.1.75
-cli -s .audio.codec pcm
-cli -s .audio.outputVolume 100
-killall majestic; sleep 2; majestic &
-exit
-
-
-
-Повторите для каждой камеры. Для постоянного сохранения отредактируйте /etc/majestic.yaml:
-
-audio:
-  enabled: true
-  codec: pcm           # вместо alaw
-  outputEnabled: true
-  outputVolume: 100
-  srate: 8000
-
-
-Примеры автоматизаций
-Beward - приветствие при открытии двери
-
-- alias: "Beward - Добро пожаловать"
-  trigger:
-    - platform: state
-      entity_id: binary_sensor.beward_sipdomofon_door
-      to: 'on'
-  action:
-    - service: script.beward_say
-      data:
-        message: "Добро пожаловать домой!"
-
-
-OpenIPC - оповещение о движении
-
-
-- alias: "OpenIPC 75 - Обнаружено движение"
-  trigger:
-    - platform: state
-      entity_id: binary_sensor.openipc_75_motion
-      to: 'on'
-  action:
-    - service: script.openipc_say_75
-      data:
-        message: "Внимание! Движение на заднем дворе"
-
-Утреннее приветствие на всех камерах
-
-- alias: "Доброе утро"
-  trigger:
-    - platform: time
-      at: "08:00:00"
-  action:
-    - service: script.openipc_say_all
-      data:
-        message: "Доброе утро! Сегодня {{ states('weather.home') }}"
-
-
-LNPR - свой автомобиль заехал
-
-
-- alias: "Свой автомобиль"
-  trigger:
-    - platform: state
-      entity_id: sensor.beward_sipdomofon_last_plate
-  condition:
-    - condition: template
-      value_template: "{{ trigger.to_state.state == 'A123BC77' }}"
-  action:
-    - service: script.openipc_say_all
-      data:
-        message: "Свой автомобиль заехал, открываю ворота"
-    - service: switch.turn_on
-      entity_id: switch.gate_opener
-
-
-📁 Структура файлов
-/config/
-├── custom_components/openipc/          # Интеграция
-├── tts_cache/                          # TTS файлы
-│   ├── tts_generate.sh                  # Генератор A-law для Beward
-│   ├── tts_generate_openipc.sh          # Генератор PCM для OpenIPC
-│   └── debug.log                         # Логи TTS
-├── openipc_say_*.sh                      # Скрипты для конкретных камер
-├── shell_commands.yaml                    # Shell команды
-├── scripts.yaml                           # Скрипты HA
-└── automations.yaml                        # Автоматизации
+yaml
+openipc:
+  telegram_bot_token: "ВАШ_ТОКЕН_БОТА"
+  telegram_chat_id: "ВАШ_CHAT_ID"
+🤖 Блюпринт: Сканер QR-кодов
+Этот блюпринт создает автоматизацию, которая запускает сканирование по нажатию кнопки, проверяет код и выполняет действия: TTS, управление реле, уведомления в Telegram.
 
+Как использовать:
 
+Перейдите в Настройки → Автоматизации → Сценарии (Blueprints).
+
+Нажмите "Импортировать сценарий" и вставьте сырую ссылку на файл блюпринта в этом репозитории: https://github.com/OpenIPC/hass/blob/main/blueprints/automation/openipc/qr_scanner.yaml
+
+Нажмите "Предпросмотр", затем "Создать автоматизацию".
+
+Заполните необходимые поля:
+
+Камера (например, camera.openipc_sip)
+
+Медиа-плеер (например, media_player.openipc_sip_speaker)
+
+Реле (опционально, например, switch.nspanel_relay_1)
+
+Ожидаемый QR код
+
+Сущность-триггер (вспомогательный input_boolean, который вы создадите для запуска сканирования)
+
+Настройки Telegram.
+
+📝 Примеры автоматизаций
+Простое TTS-уведомление
+yaml
+alias: "Сказать 'Привет' при движении"
+trigger:
+  - platform: state
+    entity_id: binary_sensor.openipc_sip_motion
+    to: "on"
+action:
+  - service: media_player.play_media
+    target:
+      entity_id: media_player.openipc_sip_speaker
+    data:
+      media_content_id: "Привет, вы в кадре!"
+      media_content_type: "tts"
+Сканирование QR для управления воротами
+(Блюпринт выше делает это автоматически. Здесь показан основной вызов сервиса)
+
+yaml
+service: openipc.start_qr_scan
+data:
+  entity_id: camera.openipc_sip
+  expected_code: "мой_секретный_код_ворот"
+  timeout: 60
 🆘 Поддержка
-Если у вас возникли проблемы:
+Проверьте логи Home Assistant.
 
-Проверьте логи HA: Настройки → Система → Логи
+Проверьте логи аддона в Supervisor.
 
-Проверьте логи TTS: cat /config/tts_cache/debug.log
+Убедитесь, что камера доступна (ping).
 
-Убедитесь, что камера доступна: ping 192.168.1.x
-
-Проверьте формат аудио: для Beward - A-law, для OpenIPC - PCM
-
+При проблемах с TTS проверьте отладочные аудиофайлы аддона в /config/www/.
 
 🤝 Вклад в проект
-Мы приветствуем любые contributions! Если вы нашли баг или хотите добавить новую функцию:
-
-Форкните репозиторий
-
-Создайте ветку для изменений
-
-Отправьте pull request
+Мы приветствуем ваши пул-реквесты!
 
 📜 Лицензия
-Проект распространяется под лицензией MIT.
-
-⭐ Поддержка проекта
-Если проект оказался полезным, поставьте звезду на GitHub!
-
-
-
-# История изменений
-
-## [2.1.0] - 2026-02-25
-
-### ✨ Новые возможности
-- **TTS для OpenIPC камер** - голосовые оповещения через динамик
-- **Поддержка нескольких OpenIPC камер** - индивидуальные скрипты для каждой
-- **Групповые оповещения** - одна команда для всех камер
-
-### 🔧 Улучшения
-- Оптимизирована генерация TTS для PCM формата
-- Добавлены скрипты для автоматического восстановления зависимостей
-- Улучшена обработка ошибок в shell_commands
-
-### 🐛 Исправления
-- Исправлена проблема XRUN (переполнение буфера) на OpenIPC камерах
-- Правильная настройка кодеков (PCM для OpenIPC, A-law для Beward)
-
-## [2.0.0] - 2026-02-23
-
-### ✨ Новые возможности
-- Поддержка Beward DS07P-LP
-- Поддержка Vivotek SD9364-EHL
-- TTS для Beward
-- LNPR (распознавание номеров) для Beward
-
-
+MIT
 
 
 
